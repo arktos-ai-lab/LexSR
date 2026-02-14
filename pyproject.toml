@@ -1,0 +1,83 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "lexsr"
+version = "0.4.0"
+description = "Suriname Legal Knowledge Fabric - OCR-first legal document portal with FRBR data model, hybrid search, and static site generation"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "LexSR Contributors"},
+]
+keywords = ["suriname-law", "legal-tech", "ocr", "legal-search", "frbr", "eli"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Legal Industry",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+    "Topic :: Text Processing :: Linguistic",
+]
+
+dependencies = []
+
+[project.optional-dependencies]
+api = [
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.20.0",
+    "pydantic>=2.0",
+]
+ingestion = [
+    "requests>=2.28",
+    "lxml>=4.9",
+]
+ocr = [
+    "torch>=2.0",
+    "transformers>=4.30",
+    "pypdfium2>=4.0",
+    "Pillow>=9.0",
+]
+search = [
+    "chromadb>=0.4",
+    "sentence-transformers>=2.0",
+]
+scraper = [
+    "httpx>=0.24",
+    "beautifulsoup4>=4.12",
+]
+static = [
+    "jinja2>=3.1",
+]
+eval = [
+    "numpy>=1.24",
+]
+all = [
+    "lexsr[api,ingestion,ocr,search,scraper,static,eval]",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.1.0",
+]
+
+[project.urls]
+Repository = "https://github.com/your-org/lexsr"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/lexsr"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
