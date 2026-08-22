@@ -7,7 +7,7 @@ temporal versioning, static site generation, and API serving.
 
 Modules:
     core        - FRBR data model, URI system, versioning, store, resolver, integrity
-    ocr         - DeepSeek OCR pipeline for scanned PDFs
+    ocr         - Qwen2.5-VL OCR pipeline for scanned PDFs
     extraction  - Structure extraction from OCR text
     scraper     - Web scrapers for Suriname legal sources
     search      - BM25 + vector hybrid search (RuVector)

@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from ..core.store import CanonicalStore
+from ..ocr.citation_extractor import CitationExtractor
 from .bronze import BronzeRecord, BronzeStore
 from .silver import ProcessingResult, SilverProcessor
 
@@ -30,6 +31,7 @@ class IngestionStats:
     works_saved: int = 0
     expressions_saved: int = 0
     fragments_saved: int = 0
+    citations_saved: int = 0
     errors: List[str] = field(default_factory=list)
 
     def summary(self) -> Dict[str, Any]:
@@ -48,6 +50,7 @@ class IngestionStats:
                 "works": self.works_saved,
                 "expressions": self.expressions_saved,
                 "fragments": self.fragments_saved,
+                "citations": self.citations_saved,
             },
             "total_errors": len(self.errors),
         }
@@ -131,6 +134,18 @@ class IngestionPipeline:
         for frag in result.fragments:
             self.store.save_fragment(frag)
             stats.fragments_saved += 1
+
+        # Extract and persist citations from each expression's fragments.
+        # Run after all fragments are saved so URI lookups succeed.
+        extractor = CitationExtractor(self.store)
+        for expr in result.expressions:
+            expr_frags = [f for f in result.fragments if f.expression_id == expr.id]
+            if not expr_frags:
+                continue
+            citations = extractor.extract_from_fragments(
+                expr_frags, source_version_date=expr.version_date
+            )
+            stats.citations_saved += extractor.save_to_store(citations)
 
     def ingest_single(self, record: BronzeRecord) -> ProcessingResult:
         """Ingest a single record and return the processing result."""

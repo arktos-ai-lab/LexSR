@@ -1,34 +1,29 @@
 """
-Evaluation framework for the Legal Knowledge Fabric.
+Evaluation framework for the LexSR pipeline.
 
-Provides automated quality assessment for:
-  - Citation resolution accuracy (precision/recall)
-  - Temporal correctness (legislation version on date X)
-  - Data completeness (per source, per year)
-  - Link integrity metrics
-  - Known-answer benchmark suite
-
-Sprint 3: Quality system per PLAN.md --
-  "If you do this, quality improves every week instead of drifting."
+Provides:
+- KnownAnswer / KnownAnswerDataset  — gold-standard benchmark cases
+- CitationMetrics / TemporalMetrics / CompletenessMetrics / QualityReport — quality metrics
+- BenchmarkCase / BenchmarkResult / BenchmarkSuite — end-to-end evaluation runner
 """
 
-from .benchmark import BenchmarkSuite, BenchmarkResult, BenchmarkCase
+from .dataset import KnownAnswer, KnownAnswerDataset
 from .metrics import (
     CitationMetrics,
-    TemporalMetrics,
     CompletenessMetrics,
     QualityReport,
+    TemporalMetrics,
 )
-from .dataset import KnownAnswerDataset, KnownAnswer
+from .benchmark import BenchmarkCase, BenchmarkResult, BenchmarkSuite
 
 __all__ = [
-    "BenchmarkSuite",
-    "BenchmarkResult",
-    "BenchmarkCase",
+    "KnownAnswer",
+    "KnownAnswerDataset",
     "CitationMetrics",
     "TemporalMetrics",
     "CompletenessMetrics",
     "QualityReport",
-    "KnownAnswerDataset",
-    "KnownAnswer",
+    "BenchmarkCase",
+    "BenchmarkResult",
+    "BenchmarkSuite",
 ]

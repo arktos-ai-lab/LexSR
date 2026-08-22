@@ -20,7 +20,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -398,3 +398,80 @@ class Fragment:
         if self.text:
             return FragmentAnchor.compute_text_hash(self.text)
         return None
+
+
+# ---------------------------------------------------------------------------
+# Citation graph
+# ---------------------------------------------------------------------------
+
+class CitationType(Enum):
+    """Direction and nature of a citation between legal documents."""
+    LAW_TO_LAW = "law_to_law"       # law article cites another law/article
+    LAW_TO_CASE = "law_to_case"     # law cites a court decision (rare)
+    CASE_TO_LAW = "case_to_law"     # court decision cites a law/article
+    CASE_TO_CASE = "case_to_case"   # court decision cites another decision
+    UNKNOWN = "unknown"
+
+
+@dataclass
+class Citation:
+    """
+    A directed citation from one fragment (or work) to another.
+
+    Temporal: citations are version-aware.  A citation in Arbeidswet 1963
+    art. 4 as of 2024-01-15 points to the Grondwet 1987 art. 19 version
+    that was in force on that date.
+
+    Resolved vs. unresolved:
+      - source is always resolved (we know which document it came from)
+      - target may be unresolved if the cited work is not yet in the store
+    """
+    id: str
+    citation_type: CitationType
+
+    # --- Source (always resolved) ---
+    source_work_id: str
+    source_fragment_id: Optional[str] = None   # None = document-level
+    source_version_date: Optional[date] = None  # Expression version that contains this
+
+    # --- Target (may be unresolved) ---
+    target_work_id: Optional[str] = None        # None = not yet resolved
+    target_fragment_id: Optional[str] = None    # None = only work-level resolved
+    target_version_date: Optional[date] = None  # version of target being cited
+
+    # --- Raw evidence ---
+    raw_text: str = ""                           # exact text that was cited
+    confidence: float = 1.0                      # extraction confidence
+
+    # --- Temporal validity ---
+    # Citation is valid from the version it first appeared until the version
+    # in which it was amended away (None = still valid).
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
+
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+# ---------------------------------------------------------------------------
+# Amendment links
+# ---------------------------------------------------------------------------
+
+@dataclass
+class AmendmentLink:
+    """
+    Structural link: a wijzigingswet (amendment law) targets a base law.
+
+    This is a higher-level relationship than a Citation — it records that
+    one Work *modifies* another Work, independent of which specific articles
+    are involved (those are captured by AmendmentInstructions in the
+    consolidation module).
+    """
+    id: str
+    amendment_work_id: str        # the wijzigingswet
+    base_work_id: Optional[str]   # the law being amended (None if unresolved)
+    base_work_ref: str            # raw reference text ("Arbeidswet 1963")
+    effective_date: Optional[date] = None   # when the amendment takes effect
+    staatsblad_ref: Optional[str] = None    # "S.B. 1975 no. 10"
+    confidence: float = 1.0
+    resolved: bool = False        # True once base_work_id is filled in
+    metadata: Dict[str, Any] = field(default_factory=dict)

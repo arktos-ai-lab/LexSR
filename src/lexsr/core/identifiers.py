@@ -420,6 +420,7 @@ class AbbreviationRegistry:
         Resolve a law abbreviation to its official ID.
 
         Case-insensitive lookup with common normalization.
+        Falls back to stripping a trailing year (e.g. "Arbeidswet 1963" → "Arbeidswet").
         """
         if abbreviation in self._abbreviations:
             return self._abbreviations[abbreviation]
@@ -434,11 +435,22 @@ class AbbreviationRegistry:
             if re.sub(r"[\s.]+", "", key) == cleaned:
                 return val
 
+        # Strip trailing year (e.g. "Arbeidswet 1963" → "Arbeidswet")
+        without_year = re.sub(r"\s+\d{4}$", "", abbreviation.strip())
+        if without_year != abbreviation:
+            result = self.resolve(without_year)
+            if result:
+                return result
+
         return None
 
     def get_abbreviations(self, official_id: str) -> List[str]:
         """Get all abbreviations for an official ID."""
         return self._reverse.get(official_id, [])
+
+    def all_keys(self) -> List[str]:
+        """Return all registered abbreviation keys, longest first."""
+        return sorted(self._abbreviations.keys(), key=len, reverse=True)
 
     @property
     def count(self) -> int:
@@ -448,17 +460,123 @@ class AbbreviationRegistry:
 # Default Suriname abbreviation registry
 _suriname_registry = AbbreviationRegistry()
 _suriname_registry.register_many({
+    # ── Core codes ────────────────────────────────────────────────────────
     "Arbeidswet": "arbeidswet-1963",
+    "Arbeidswet 1963": "arbeidswet-1963",
     "AW": "arbeidswet-1963",
     "Grondwet": "grondwet-1987",
+    "Grondwet 1987": "grondwet-1987",
     "GW": "grondwet-1987",
+    # Wetboek van Strafrecht
     "WvSr": "wetboek-van-strafrecht",
     "Sr": "wetboek-van-strafrecht",
+    "Wetboek van Strafrecht": "wetboek-van-strafrecht",
+    "Strafrecht": "wetboek-van-strafrecht",
+    # Wetboek van Strafvordering
     "WvSv": "wetboek-van-strafvordering",
     "Sv": "wetboek-van-strafvordering",
+    "Wetboek van Strafvordering": "wetboek-van-strafvordering",
+    # Burgerlijk Wetboek
     "BW": "burgerlijk-wetboek",
+    "Burgerlijk Wetboek": "burgerlijk-wetboek",
+    # Wetboek van Koophandel
+    "WvK": "wetboek-van-koophandel",
+    "WK": "wetboek-van-koophandel",
+    "Wetboek van Koophandel": "wetboek-van-koophandel",
+    # ── Civil / family law ────────────────────────────────────────────────
     "Hw": "huwelijkswet",
+    "Huwelijkswet": "huwelijkswet",
     "Pw": "personeelswet",
+    "Personeelswet": "personeelswet",
+    "Vreemdelingenwet": "vreemdelingenwet",
+    "VW": "vreemdelingenwet",
+    "Onteigeningswet": "onteigeningswet",
+    "OW": "onteigeningswet",
+    # ── Electoral / constitutional ────────────────────────────────────────
+    "Kieswet": "kieswet",
+    "KW": "kieswet",
+    "Kiesregeling": "kiesregeling",
+    "KR": "kiesregeling",
+    # ── Labour / employment ───────────────────────────────────────────────
+    "Vacantiewet": "vacantiewet-1975",
+    "Vacantiewet 1975": "vacantiewet-1975",
+    "Wet Minimumloon": "wet-minimumloon",
+    "Minimumloonwet": "wet-minimumloon",
+    # ── Tax law ───────────────────────────────────────────────────────────
+    "Inkomstenbelasting": "inkomstenbelasting-1922",
+    "Inkomstenbelasting 1922": "inkomstenbelasting-1922",
+    "IB": "inkomstenbelasting-1922",
+    "Wet Loonbelasting": "wet-loonbelasting",
+    "Loonbelasting": "wet-loonbelasting",
+    "LB": "wet-loonbelasting",
+    "Zegelwet": "zegelwet",
+    "ZW": "zegelwet",
+    "Wet BTW": "wet-btw",
+    "BTW-wet": "wet-btw",
+    "BTWS": "wet-btw",
+    "Wet BTW 2022": "wet-btw",
+    # ── Finance / banking ─────────────────────────────────────────────────
+    "Bankwet": "bankwet-1956",
+    "Bankwet 1956": "bankwet-1956",
+    "Comptabiliteitsbesluit": "comptabiliteitsbesluit",
+    "Deviezenwet": "deviezenwet",
+    "Wet Staatsschuld": "wet-staatsschuld",
+    "Wet op de Staatsschuld": "wet-staatsschuld",
+    # ── Criminal / enforcement ────────────────────────────────────────────
+    "WED": "wet-economische-delicten",
+    "Wet Economische Delicten": "wet-economische-delicten",
+    "Wet op de Economische Delicten": "wet-economische-delicten",
+    # ── Transport / insurance ─────────────────────────────────────────────
+    "WAM": "wet-aansprakelijkheidsverzekering-motorrijtuigen",
+    "Wet Aansprakelijkheidsverzekering Motorrijtuigen": "wet-aansprakelijkheidsverzekering-motorrijtuigen",
+    # ── Property / land ───────────────────────────────────────────────────
+    "Stedebouwkundige Wet": "stedebouwkundige-wet",
+    "Stedebouwkundige wet": "stedebouwkundige-wet",
+    "Decreet Uitgifte Domeingrond": "decreet-uitgifte-domeingrond",
+    "DUD": "decreet-uitgifte-domeingrond",
+    "Waterschapswet": "waterschapswet-1931",
+    "Waterschapswet 1931": "waterschapswet-1931",
+    # ── Commerce / trade ─────────────────────────────────────────────────
+    "Marktwet": "marktwet",
+    "Wet Kamers van Koophandel": "wet-kamers-van-koophandel",
+    "KvK-wet": "wet-kamers-van-koophandel",
+    "Wet Cooperatieve Verenigingen": "wet-cooperatieve-verenigingen",
+    "Wet Coöperatieve Verenigingen": "wet-cooperatieve-verenigingen",
+    "Coöperatiewet": "wet-cooperatieve-verenigingen",
+    # ── Energy / resources ────────────────────────────────────────────────
+    "Petroleumwet": "petroleumwet-1990",
+    "Petroleumwet 1990": "petroleumwet-1990",
+    "Elektriciteitswet": "elektriciteitswet-2016",
+    "Elektriciteitswet 2016": "elektriciteitswet-2016",
+    "EW": "elektriciteitswet-2016",
+    "Concessiewet": "concessiewet",
+    # ── Public administration ─────────────────────────────────────────────
+    "Wet Regionale Organen": "wet-regionale-organen",
+    "WRO": "wet-regionale-organen",
+    "Wet Staatsraad": "wet-staatsraad",
+    "Wet op de Staatsraad": "wet-staatsraad",
+    "Personeelswet": "personeelswet",
+    "Archiefwet": "archiefwet-2006",
+    "Archiefwet 2006": "archiefwet-2006",
+    # ── Civil status / nationality ────────────────────────────────────────
+    "Wet Surinamerschap": "wet-surinamerschap",
+    "Wet Surinamerschap en Ingezetenschap": "wet-surinamerschap",
+    "WSI": "wet-surinamerschap",
+    "Wet Uitvoering Burgerlijke Stand": "wet-uitvoering-burgerlijke-stand",
+    "WUBS": "wet-uitvoering-burgerlijke-stand",
+    # ── IP / media ────────────────────────────────────────────────────────
+    "Auteursrecht": "wet-auteursrecht-1913",
+    "Auteursrechtwet": "wet-auteursrecht-1913",
+    "Wet Auteursrecht": "wet-auteursrecht-1913",
+    "Wet Auteursrecht 1913": "wet-auteursrecht-1913",
+    # ── Gambling / gaming ─────────────────────────────────────────────────
+    "Wet toezicht kansspelen": "wet-toezicht-kansspelen",
+    "Wet Toezicht en Controle Kansspelen": "wet-toezicht-kansspelen",
+    # ── Health ────────────────────────────────────────────────────────────
+    "Wet Medisch Tuchtrecht": "wet-medisch-tuchtrecht",
+    # ── Legal profession ──────────────────────────────────────────────────
+    "Advocatenwet": "advocatenwet",
+    "Advocatenbesluit": "advocatenbesluit",
 })
 
 

@@ -100,26 +100,26 @@ class TestKnownAnswerDataset:
         ds = KnownAnswerDataset.suriname_legal_seed()
         cases_by_id = {c.id: c for c in ds.cases()}
 
-        # cit-001: Arbeidswet
-        assert cases_by_id["cit-001"].expected_uris == ["/id/law/arbeidswet-1963"]
+        # cit-leg-001: Arbeidswet
+        assert cases_by_id["cit-leg-001"].expected_uris == ["/id/law/arbeidswet-1963"]
 
-        # cit-002: ECLI with consideration (was /ro/, now /consideration/)
-        assert cases_by_id["cit-002"].expected_uris == [
+        # cit-ecli-001: ECLI with consideration
+        assert cases_by_id["cit-ecli-001"].expected_uris == [
             "/id/ecli/ECLI:NL:HR:2020:1234/consideration/4.3"
         ]
 
-        # cit-003: Grondwet (was BWBR0001840, now grondwet-1987)
-        assert cases_by_id["cit-003"].expected_uris == ["/id/law/grondwet-1987"]
+        # cit-leg-002: Grondwet
+        assert cases_by_id["cit-leg-002"].expected_uris == ["/id/law/grondwet-1987"]
 
-        # cit-006: multi-ref with BW (was BWBR0005289, now burgerlijk-wetboek)
-        assert "/id/law/burgerlijk-wetboek" in cases_by_id["cit-006"].expected_uris
-        assert "/id/ecli/ECLI:NL:HR:2020:1234/consideration/4.3" in cases_by_id["cit-006"].expected_uris
+        # cit-multi-001: multi-ref with BW
+        assert "/id/law/burgerlijk-wetboek" in cases_by_id["cit-multi-001"].expected_uris
+        assert "/id/ecli/ECLI:NL:HR:2020:1234/consideration/4.3" in cases_by_id["cit-multi-001"].expected_uris
 
-        # cit-007: Staatsblad gazette reference
-        assert cases_by_id["cit-007"].expected_uris == ["/id/gazette/sr-1963-163"]
+        # cit-sb-001: Staatsblad gazette reference
+        assert cases_by_id["cit-sb-001"].expected_uris == ["/id/gazette/sr-1963-163"]
 
-        # cit-008: Gouvernementsblad gazette reference
-        assert cases_by_id["cit-008"].expected_uris == ["/id/gazette/sr-1936-144"]
+        # cit-gb-001: Gouvernementsblad gazette reference
+        assert cases_by_id["cit-gb-001"].expected_uris == ["/id/gazette/sr-1936-144"]
 
     def test_save_and_load(self, tmp_path):
         ds = KnownAnswerDataset("roundtrip")

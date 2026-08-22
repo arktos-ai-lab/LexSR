@@ -45,6 +45,7 @@ from .identifiers import (
     ecli_fragment_uri,
     ecli_work_uri,
     gazette_uri,
+    get_default_registry,
     law_expression_uri,
     law_fragment_uri,
     law_work_uri,
@@ -163,8 +164,9 @@ _GAZETTE_SB_RE = re.compile(
 )
 
 # Gouvernementsblad (historical gazette for Suriname, pre-independence)
+# Matches both abbreviated "G.B." and full "Gouvernementsblad"
 _GAZETTE_GB_RE = re.compile(
-    r'G\.?\s*B\.?\s+'
+    r'(?:G\.?\s*B\.?|Gouvernementsblad)\s+'
     r'(\d{4})'
     r'\s*(?:,\s*|no\.?\s*|nr\.?\s*)'
     r'(\d+)',
@@ -212,7 +214,10 @@ _ARTICLE_LAW_RE = re.compile(
     r'(?:\s+(?:sub|onder)\s+([a-z]))?'             # sub
     r'\s+(?:van\s+)?(?:de\s+|het\s+)?'             # connecting words
     r'([A-Z][A-Za-z0-9\s.]{0,60}?)'               # law name -- MUST start uppercase
-    r'(?=\s+[a-z(]|\s*[,;.\)\]\-:!?]|\s*$)',      # lookahead: lowercase, punct, or EOL
+    # Lookahead: stop at lowercase word UNLESS it is a Dutch connector ("van",
+    # "de", "het", "der", "den") that is immediately followed by an uppercase
+    # letter (part of a compound law name like "Wetboek van Strafrecht").
+    r'(?=\s+(?!(?:van|de|het|der|den)\s+[A-Z])[a-z(]|\s*[,;.\)\]\-:!?]|\s*$)',
 )
 
 # Reverse order: "LawName artikel X" or "BW art. 6:162"
@@ -260,6 +265,7 @@ class ReferenceParser:
       Pass 3: EU legislation references
       Pass 4: Gazette references (Staatsblad / Gouvernementsblad)
       Pass 5: Bare article references (low confidence, context-dependent)
+      Pass 6: Standalone known law names (e.g. "De Zegelwet is van toepassing")
     """
 
     def __init__(self, jurisdiction: str = _DEFAULT_JURISDICTION):
@@ -291,6 +297,9 @@ class ReferenceParser:
 
         # Pass 5: bare article references (only if not already captured)
         refs.extend(self._extract_bare_articles(text))
+
+        # Pass 6: standalone known law names without article numbers
+        refs.extend(self._extract_standalone_laws(text))
 
         # Deduplicate overlapping spans, keeping highest confidence
         refs = self._deduplicate(refs)
@@ -525,6 +534,39 @@ class ReferenceParser:
                 context=text[max(0, m.start() - 60):m.end() + 60],
                 confidence=0.30,
                 metadata={"bare_reference": True},
+            ))
+        return refs
+
+    # ---- Pass 6: Standalone known law names --------------------------------
+
+    def _extract_standalone_laws(self, text: str) -> List[ParsedReference]:
+        """
+        Match known law abbreviations that appear in text without an article
+        number (e.g. "De Zegelwet is van toepassing…").
+
+        Uses the default AbbreviationRegistry; only multi-char keys are used
+        to avoid spurious short-abbreviation matches.
+        """
+        registry = get_default_registry()
+        keys = [k for k in registry.all_keys() if len(k) >= 4]
+        if not keys:
+            return []
+        pattern = r'(?<!\w)(' + '|'.join(re.escape(k) for k in keys) + r')(?!\w)'
+        refs = []
+        for m in re.finditer(pattern, text):
+            name = m.group(1)
+            law_id = resolve_abbreviation(name)
+            if not law_id:
+                continue
+            refs.append(ParsedReference(
+                raw_text=m.group(0),
+                ref_type=ReferenceType.LEGISLATION_CITATION,
+                law_abbreviation=name,
+                law_id=law_id,
+                char_start=m.start(),
+                char_end=m.end(),
+                context=text[max(0, m.start() - 40):m.end() + 40],
+                confidence=0.70,
             ))
         return refs
 

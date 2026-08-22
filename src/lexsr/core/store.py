@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import sqlite3
 from contextlib import contextmanager
 from datetime import date, datetime
@@ -24,6 +25,9 @@ from typing import Any, Dict, Generator, List, Optional, Tuple
 
 from .identifiers import LegalURI, URIScheme, parse_uri
 from .models import (
+    AmendmentLink,
+    Citation,
+    CitationType,
     DocumentStatus,
     Expression,
     Fragment,
@@ -41,6 +45,48 @@ from .versioning import TemporalIndex, VersionChain, VersionDiff
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
+
+_NUM_RE = re.compile(r'^(\d+)')
+
+
+def _fragment_sort_key(frag: "Fragment") -> tuple:
+    """
+    Return a sort key that places fragments in natural document order:
+    1. Articles numerically (1, 2 … 10 rather than 1, 10, 2).
+    2. Paragraph fragments immediately after their parent article.
+    3. Paragraphs with no matching parent (memos, annexes) at the end.
+
+    Key tuple: (is_orphan_para, article_num_int, article_num_str,
+                is_paragraph, para_num_int, para_num_str)
+    """
+    from .models import FragmentType  # avoid circular import at module level
+
+    num_str = (frag.number or "").strip()
+    m = _NUM_RE.match(num_str)
+    num_int = int(m.group(1)) if m else 9999
+
+    if frag.fragment_type == FragmentType.ARTICLE:
+        return (0, num_int, num_str, 0, 0, "")
+    else:
+        # Paragraph: sort after its parent article.
+        # Parent article number is embedded in parent_fragment_id as the
+        # numeric portion of the last slug segment, e.g. "…-art-7a-…".
+        # Fall back to sorting all orphan paragraphs at the very end.
+        pid = frag.parent_fragment_id or ""
+        pm = re.search(r'-art-?(\d+)', pid)
+        if pm:
+            part_int = int(pm.group(1))
+        else:
+            # Try to extract leading digits from parent id for ordering
+            pm2 = _NUM_RE.search(pid)
+            part_int = int(pm2.group(1)) if pm2 else 9999
+
+        return (1 if not pid else 0, part_int, pid, 1, num_int, num_str)
+
+
+def _order_fragments(frags: "List[Fragment]") -> "List[Fragment]":
+    """Return fragments sorted in natural document order."""
+    return sorted(frags, key=_fragment_sort_key)
 
 
 class CanonicalStore:
@@ -267,6 +313,74 @@ class CanonicalStore:
         cur.execute("""
             CREATE INDEX IF NOT EXISTS idx_diffs_to_expression
             ON version_diffs(to_expression_id)
+        """)
+
+        # --- Citations ---
+        # Directed edges in the citation graph: fragment/work → fragment/work.
+        # source is always resolved; target may be unresolved (target_work_id NULL).
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS citations (
+                id TEXT PRIMARY KEY,
+                citation_type TEXT NOT NULL,
+                source_work_id TEXT NOT NULL REFERENCES works(id),
+                source_fragment_id TEXT,
+                source_version_date TEXT,
+                target_work_id TEXT,
+                target_fragment_id TEXT,
+                target_version_date TEXT,
+                raw_text TEXT NOT NULL DEFAULT '',
+                confidence REAL DEFAULT 1.0,
+                valid_from TEXT,
+                valid_to TEXT,
+                metadata TEXT DEFAULT '{}',
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_citations_source_work
+            ON citations(source_work_id)
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_citations_target_work
+            ON citations(target_work_id)
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_citations_source_fragment
+            ON citations(source_fragment_id)
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_citations_target_fragment
+            ON citations(target_fragment_id)
+        """)
+
+        # --- Amendment links ---
+        # Structural links: wijzigingswet → base law.
+        # Separate from citations because they drive the consolidation engine.
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS amendment_links (
+                id TEXT PRIMARY KEY,
+                amendment_work_id TEXT NOT NULL REFERENCES works(id),
+                base_work_id TEXT,
+                base_work_ref TEXT NOT NULL,
+                effective_date TEXT,
+                staatsblad_ref TEXT,
+                confidence REAL DEFAULT 1.0,
+                resolved INTEGER DEFAULT 0,
+                metadata TEXT DEFAULT '{}',
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_amendment_links_amendment
+            ON amendment_links(amendment_work_id)
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_amendment_links_base
+            ON amendment_links(base_work_id)
+        """)
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS idx_amendment_links_unresolved
+            ON amendment_links(resolved) WHERE resolved = 0
         """)
 
         self._conn.commit()
@@ -544,18 +658,30 @@ class CanonicalStore:
     def get_fragments_for_expression(
         self, expression_id: str, fragment_type: Optional[FragmentType] = None
     ) -> List[Fragment]:
-        """Fetch all Fragments for an Expression, optionally filtered by type."""
+        """Fetch all Fragments for an Expression, optionally filtered by type.
+
+        Fragments are returned in document order:
+        - Articles ordered numerically (1, 2 … 10, 11 — not lexicographic).
+        - Paragraph fragments are grouped immediately after their parent article.
+        - Memos / annexes (paragraphs with no matching parent article) come last.
+
+        This matters because almost all fragments have position=0 in the current
+        dataset; relying on depth+position alone gives arbitrary ordering.
+        """
         if fragment_type:
             rows = self._conn.execute(
-                "SELECT * FROM fragments WHERE expression_id = ? AND fragment_type = ? ORDER BY position",
+                "SELECT * FROM fragments WHERE expression_id = ? AND fragment_type = ? "
+                "ORDER BY position",
                 (expression_id, fragment_type.value),
             ).fetchall()
-        else:
-            rows = self._conn.execute(
-                "SELECT * FROM fragments WHERE expression_id = ? ORDER BY depth, position",
-                (expression_id,),
-            ).fetchall()
-        return [self._row_to_fragment(r) for r in rows]
+            return [self._row_to_fragment(r) for r in rows]
+
+        rows = self._conn.execute(
+            "SELECT * FROM fragments WHERE expression_id = ?",
+            (expression_id,),
+        ).fetchall()
+        frags = [self._row_to_fragment(r) for r in rows]
+        return _order_fragments(frags)
 
     def get_child_fragments(self, parent_fragment_id: str) -> List[Fragment]:
         """Fetch child fragments of a parent, ordered by position."""
@@ -645,10 +771,137 @@ class CanonicalStore:
     def stats(self) -> Dict[str, Any]:
         """Return counts of all stored objects."""
         counts = {}
-        for table in ("works", "expressions", "manifestations", "fragments", "version_diffs"):
+        for table in (
+            "works", "expressions", "manifestations", "fragments",
+            "version_diffs", "citations", "amendment_links",
+        ):
             row = self._conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
             counts[table] = row[0]
         return counts
+
+    # ------------------------------------------------------------------
+    # Citations
+    # ------------------------------------------------------------------
+
+    def save_citation(self, citation: Citation) -> None:
+        """Insert or update a Citation."""
+        with self._transaction():
+            self._conn.execute("""
+                INSERT INTO citations (
+                    id, citation_type,
+                    source_work_id, source_fragment_id, source_version_date,
+                    target_work_id, target_fragment_id, target_version_date,
+                    raw_text, confidence, valid_from, valid_to, metadata
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    target_work_id=excluded.target_work_id,
+                    target_fragment_id=excluded.target_fragment_id,
+                    target_version_date=excluded.target_version_date,
+                    confidence=excluded.confidence,
+                    valid_to=excluded.valid_to,
+                    metadata=excluded.metadata
+            """, (
+                citation.id, citation.citation_type.value,
+                citation.source_work_id, citation.source_fragment_id,
+                citation.source_version_date.isoformat() if citation.source_version_date else None,
+                citation.target_work_id, citation.target_fragment_id,
+                citation.target_version_date.isoformat() if citation.target_version_date else None,
+                citation.raw_text, citation.confidence,
+                citation.valid_from.isoformat() if citation.valid_from else None,
+                citation.valid_to.isoformat() if citation.valid_to else None,
+                json.dumps(citation.metadata),
+            ))
+
+    def get_citations_from(
+        self, work_id: str, fragment_id: Optional[str] = None
+    ) -> List[Citation]:
+        """Outgoing citations from a work (or specific fragment)."""
+        if fragment_id:
+            rows = self._conn.execute(
+                "SELECT * FROM citations WHERE source_fragment_id = ? ORDER BY valid_from",
+                (fragment_id,),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM citations WHERE source_work_id = ? ORDER BY valid_from",
+                (work_id,),
+            ).fetchall()
+        return [self._row_to_citation(r) for r in rows]
+
+    def get_citations_to(
+        self, work_id: str, fragment_id: Optional[str] = None
+    ) -> List[Citation]:
+        """Incoming citations to a work (or specific fragment) — 'cited by'."""
+        if fragment_id:
+            rows = self._conn.execute(
+                "SELECT * FROM citations WHERE target_fragment_id = ?",
+                (fragment_id,),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM citations WHERE target_work_id = ?",
+                (work_id,),
+            ).fetchall()
+        return [self._row_to_citation(r) for r in rows]
+
+    def get_unresolved_citations(self) -> List[Citation]:
+        """Citations where the target work has not yet been resolved."""
+        rows = self._conn.execute(
+            "SELECT * FROM citations WHERE target_work_id IS NULL"
+        ).fetchall()
+        return [self._row_to_citation(r) for r in rows]
+
+    # ------------------------------------------------------------------
+    # Amendment links
+    # ------------------------------------------------------------------
+
+    def save_amendment_link(self, link: AmendmentLink) -> None:
+        """Insert or update an AmendmentLink."""
+        with self._transaction():
+            self._conn.execute("""
+                INSERT INTO amendment_links (
+                    id, amendment_work_id, base_work_id, base_work_ref,
+                    effective_date, staatsblad_ref, confidence, resolved, metadata
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    base_work_id=excluded.base_work_id,
+                    effective_date=excluded.effective_date,
+                    confidence=excluded.confidence,
+                    resolved=excluded.resolved,
+                    metadata=excluded.metadata
+            """, (
+                link.id, link.amendment_work_id, link.base_work_id,
+                link.base_work_ref,
+                link.effective_date.isoformat() if link.effective_date else None,
+                link.staatsblad_ref, link.confidence,
+                1 if link.resolved else 0,
+                json.dumps(link.metadata),
+            ))
+
+    def get_amendment_links_for_base(self, base_work_id: str) -> List[AmendmentLink]:
+        """All amendments that target a given base law, ordered by effective date."""
+        rows = self._conn.execute(
+            "SELECT * FROM amendment_links WHERE base_work_id = ? ORDER BY effective_date",
+            (base_work_id,),
+        ).fetchall()
+        return [self._row_to_amendment_link(r) for r in rows]
+
+    def get_amendment_links_for_amendment(
+        self, amendment_work_id: str
+    ) -> List[AmendmentLink]:
+        """Which base laws does this wijzigingswet target?"""
+        rows = self._conn.execute(
+            "SELECT * FROM amendment_links WHERE amendment_work_id = ?",
+            (amendment_work_id,),
+        ).fetchall()
+        return [self._row_to_amendment_link(r) for r in rows]
+
+    def get_unresolved_amendment_links(self) -> List[AmendmentLink]:
+        """Amendment links where the base law has not yet been matched to a Work."""
+        rows = self._conn.execute(
+            "SELECT * FROM amendment_links WHERE resolved = 0"
+        ).fetchall()
+        return [self._row_to_amendment_link(r) for r in rows]
 
     # ------------------------------------------------------------------
     # Row deserializers
@@ -753,5 +1006,35 @@ class CanonicalStore:
             extraction_method=row["extraction_method"] or "structural",
             confidence=row["confidence"] if row["confidence"] is not None else 1.0,
             extracted_at=datetime.fromisoformat(row["extracted_at"]) if row["extracted_at"] else None,
+            metadata=json.loads(row["metadata"]) if row["metadata"] else {},
+        )
+
+    def _row_to_citation(self, row: sqlite3.Row) -> Citation:
+        return Citation(
+            id=row["id"],
+            citation_type=CitationType(row["citation_type"]),
+            source_work_id=row["source_work_id"],
+            source_fragment_id=row["source_fragment_id"],
+            source_version_date=date.fromisoformat(row["source_version_date"]) if row["source_version_date"] else None,
+            target_work_id=row["target_work_id"],
+            target_fragment_id=row["target_fragment_id"],
+            target_version_date=date.fromisoformat(row["target_version_date"]) if row["target_version_date"] else None,
+            raw_text=row["raw_text"] or "",
+            confidence=row["confidence"] if row["confidence"] is not None else 1.0,
+            valid_from=date.fromisoformat(row["valid_from"]) if row["valid_from"] else None,
+            valid_to=date.fromisoformat(row["valid_to"]) if row["valid_to"] else None,
+            metadata=json.loads(row["metadata"]) if row["metadata"] else {},
+        )
+
+    def _row_to_amendment_link(self, row: sqlite3.Row) -> AmendmentLink:
+        return AmendmentLink(
+            id=row["id"],
+            amendment_work_id=row["amendment_work_id"],
+            base_work_id=row["base_work_id"],
+            base_work_ref=row["base_work_ref"],
+            effective_date=date.fromisoformat(row["effective_date"]) if row["effective_date"] else None,
+            staatsblad_ref=row["staatsblad_ref"],
+            confidence=row["confidence"] if row["confidence"] is not None else 1.0,
+            resolved=bool(row["resolved"]),
             metadata=json.loads(row["metadata"]) if row["metadata"] else {},
         )

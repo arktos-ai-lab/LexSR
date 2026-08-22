@@ -107,6 +107,7 @@ class StaticSiteGenerator:
         # Generate pages
         self._generate_index()
         self._generate_search()
+        self._generate_works_index(works)
 
         for work_id in works:
             self._generate_work(work_id)
@@ -146,8 +147,8 @@ class StaticSiteGenerator:
 
     def _get_all_work_ids(self) -> List[str]:
         """Get all work IDs from the store."""
-        # This is a placeholder - implement proper store query
-        return []
+        works = self.store.list_works(limit=100_000)
+        return [w.id for w in works]
 
     def _generate_index(self):
         """Generate site index page."""
@@ -171,6 +172,38 @@ class StaticSiteGenerator:
         search_path.write_text(html, encoding="utf-8")
         logger.info("Generated search interface")
 
+    def _generate_works_index(self, work_ids: List[str]):
+        """Generate works index page listing all laws."""
+        works_with_meta = []
+        for work_id in work_ids:
+            work = self.store.get_work(work_id)
+            if work:
+                works_with_meta.append({
+                    "work": work,
+                    "document_type": work.document_type or None,
+                })
+
+        # Sort by title
+        works_with_meta.sort(key=lambda w: w["work"].title)
+
+        # Group by document type for statistics
+        type_counts = {}
+        for item in works_with_meta:
+            doc_type = item["document_type"] or "unknown"
+            type_counts[doc_type] = type_counts.get(doc_type, 0) + 1
+
+        html = self.templates.render_works_index({
+            "site_title": "Wetten van Suriname",
+            "base_url": self.base_url,
+            "works": works_with_meta,
+            "total_works": len(works_with_meta),
+            "type_counts": type_counts,
+        })
+
+        works_path = self.output_dir / "works" / "index.html"
+        works_path.write_text(html, encoding="utf-8")
+        logger.info(f"Generated works index with {len(works_with_meta)} laws")
+
     def _generate_work(self, work_id: str):
         """Generate pages for a single work."""
         # Get work from store
@@ -191,6 +224,64 @@ class StaticSiteGenerator:
             for expr in expressions[:-1]:
                 self._generate_expression(work, expr, is_latest=False)
 
+    def _build_version_history(self, work_id: str) -> List[Dict[str, Any]]:
+        """
+        Build a version history list for the sidebar timeline.
+
+        Each entry represents one expression (version) of the work.
+        For the original expression there is typically no amendment link;
+        for subsequent expressions we look up the amendment that caused it.
+
+        Returns a list of dicts sorted chronologically (oldest first):
+            {
+                "version_date": "YYYY-MM-DD",
+                "staatsblad_ref": str,       # empty string when unknown
+                "amendment_title": str,      # empty string when unknown
+                "amendment_id": str | None,  # work ID for linking
+                "is_current": bool,
+            }
+        """
+        expressions = self.store.get_expressions_for_work(work_id)
+        if not expressions:
+            return []
+
+        # Index amendment links by effective_date for fast lookup.
+        # Multiple amendments could share a date, so we keep a list and
+        # use the first match.
+        links_by_date: Dict[str, List] = {}
+        for link in self.store.get_amendment_links_for_base(work_id):
+            key = link.effective_date.isoformat() if link.effective_date else ""
+            links_by_date.setdefault(key, []).append(link)
+
+        latest_date = expressions[-1].version_date
+
+        versions: List[Dict[str, Any]] = []
+        for expr in expressions:
+            vdate_str = expr.version_date.isoformat()
+
+            # Try to match an amendment link by effective_date == version_date
+            matched_links = links_by_date.get(vdate_str, [])
+            if matched_links:
+                link = matched_links[0]
+                sb_ref = link.staatsblad_ref or ""
+                amend_work = self.store.get_work(link.amendment_work_id)
+                amend_title = amend_work.title if amend_work else ""
+                amend_id = link.amendment_work_id
+            else:
+                sb_ref = ""
+                amend_title = ""
+                amend_id = None
+
+            versions.append({
+                "version_date": vdate_str,
+                "staatsblad_ref": sb_ref,
+                "amendment_title": amend_title,
+                "amendment_id": amend_id,
+                "is_current": expr.version_date == latest_date,
+            })
+
+        return versions
+
     def _generate_expression(
         self,
         work: Work,
@@ -204,6 +295,12 @@ class StaticSiteGenerator:
         # Build fragment hierarchy
         hierarchy = self._build_hierarchy(fragments)
 
+        # Get amendment metadata for this work
+        amendment_data = self._get_amendment_metadata(work.id)
+
+        # Build version history for the sidebar timeline
+        versions = self._build_version_history(work.id)
+
         # Prepare context
         context = {
             "site_title": "Wetten van Suriname",
@@ -212,6 +309,10 @@ class StaticSiteGenerator:
             "expression": expression,
             "fragments": hierarchy,
             "is_latest": is_latest,
+            "document_type": amendment_data.get("document_type"),
+            "amendments_to_this": amendment_data.get("amendments_to_this", []),
+            "this_amends": amendment_data.get("this_amends", []),
+            "versions": versions,
         }
 
         # Render template
@@ -233,23 +334,89 @@ class StaticSiteGenerator:
 
     def _build_hierarchy(self, fragments: List[Fragment]) -> Dict[str, Any]:
         """Build hierarchical structure from flat fragment list."""
-        # Simplified hierarchical builder
-        # In production, this would create a proper tree structure
+        # Get articles and sort them properly
+        articles = [f for f in fragments if f.fragment_type.value == "article"]
+
+        # Try to sort by numeric article number, fallback to string sort
+        def article_sort_key(article):
+            try:
+                return (0, int(article.number))
+            except (ValueError, AttributeError):
+                return (1, article.number or "")
+
+        articles.sort(key=article_sort_key)
+
         return {
-            "articles": [f for f in fragments if f.fragment_type.value == "article"],
+            "articles": articles,
             "paragraphs": [f for f in fragments if f.fragment_type.value == "paragraph"],
         }
 
+    def _get_amendment_metadata(self, work_id: str) -> Dict[str, Any]:
+        """Get amendment metadata for a work from the database."""
+        result: Dict[str, Any] = {
+            "document_type": None,
+            "amendments_to_this": [],
+            "this_amends": [],
+        }
+
+        # document_type lives on the Work object itself
+        work = self.store.get_work(work_id)
+        if work:
+            result["document_type"] = work.document_type or None
+
+        # Which wijzigingswetten target this base law?
+        for link in self.store.get_amendment_links_for_base(work_id):
+            amend_work = self.store.get_work(link.amendment_work_id)
+            result["amendments_to_this"].append({
+                "id": link.amendment_work_id,
+                "title": amend_work.title if amend_work else link.amendment_work_id,
+                "reference": link.base_work_ref,
+                "effective_date": link.effective_date.isoformat() if link.effective_date else None,
+            })
+
+        # Which base law(s) does this wijzigingswet target?
+        for link in self.store.get_amendment_links_for_amendment(work_id):
+            base_work = self.store.get_work(link.base_work_id) if link.base_work_id else None
+            result["this_amends"].append({
+                "id": link.base_work_id,
+                "title": base_work.title if base_work else link.base_work_ref,
+                "reference": link.base_work_ref,
+                "confidence": link.confidence,
+            })
+
+        return result
+
     def _generate_search_data(self):
         """Generate JSON search index for client-side search."""
-        # This would build a search index from all fragments
-        # For now, just a placeholder
+        documents = []
+
+        works = self.store.list_works(limit=100_000)
+        for work in works:
+            expressions = self.store.get_expressions_for_work(work.id)
+            if not expressions:
+                continue
+            latest_expr = expressions[-1]
+            fragments = self.store.get_fragments_for_expression(latest_expr.id)
+            work_url = f"{self.base_url}/works/{work.id}/"
+            for frag in fragments:
+                if not frag.text or frag.text == "[Vervallen]":
+                    continue
+                doc: Dict[str, Any] = {
+                    "id": frag.id,
+                    "work_id": work.id,
+                    "work_title": work.title,
+                    "article": frag.number,
+                    "title": frag.title or f"Artikel {frag.number}",
+                    "text": frag.text[:500],   # cap for index size
+                    "url": f"{work_url}#{frag.number}",
+                }
+                documents.append(doc)
 
         search_index = {
-            "documents": [],
+            "documents": documents,
             "generated": date.today().isoformat(),
         }
 
         data_path = self.output_dir / "data" / "search-index.json"
-        data_path.write_text(json.dumps(search_index, indent=2), encoding="utf-8")
-        logger.info("Generated search index data")
+        data_path.write_text(json.dumps(search_index, ensure_ascii=False), encoding="utf-8")
+        logger.info("Generated search index with %d fragment entries", len(documents))

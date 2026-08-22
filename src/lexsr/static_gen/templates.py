@@ -35,11 +35,11 @@ class TemplateEngine:
         self.template_dir = Path(template_dir) if template_dir else None
 
         try:
-            from jinja2 import Environment, FileSystemLoader, BaseLoader
+            from jinja2 import Environment, FileSystemLoader, DictLoader
 
             self._env_cls = Environment
             self._file_loader = FileSystemLoader
-            self._base_loader = BaseLoader
+            self._dict_loader = DictLoader
 
         except ImportError:
             raise ImportError(
@@ -52,20 +52,9 @@ class TemplateEngine:
             loader = self._file_loader(str(self.template_dir))
         else:
             # Use built-in templates
-            loader = self._DictLoader(self._get_builtin_templates())
+            loader = self._dict_loader(self._get_builtin_templates())
 
         self.env = self._env_cls(loader=loader, autoescape=True)
-
-    class _DictLoader:
-        """Simple dict-based template loader for built-in templates."""
-        def __init__(self, templates: Dict[str, str]):
-            self.templates = templates
-
-        def get_source(self, environment, template):
-            if template not in self.templates:
-                raise Exception(f"Template not found: {template}")
-            source = self.templates[template]
-            return source, None, lambda: True
 
     def _get_builtin_templates(self) -> Dict[str, str]:
         """Return built-in templates as a dictionary."""
@@ -75,6 +64,7 @@ class TemplateEngine:
             "search.html": SEARCH_TEMPLATE,
             "expression.html": EXPRESSION_TEMPLATE,
             "fragment.html": FRAGMENT_TEMPLATE,
+            "works_index.html": WORKS_INDEX_TEMPLATE,
         }
 
     def render_index(self, context: Dict[str, Any]) -> str:
@@ -89,7 +79,24 @@ class TemplateEngine:
 
     def render_expression(self, context: Dict[str, Any]) -> str:
         """Render expression (law version) page."""
+        # Add Dutch status translations
+        status_translations = {
+            'in_force': 'Geldig',
+            'draft': 'Ontwerp',
+            'repealed': 'Ingetrokken',
+            'unknown': 'Onbekend',
+        }
+        context['status_nl'] = status_translations.get(
+            context.get('expression', {}).status.value if hasattr(context.get('expression', {}), 'status') else 'unknown',
+            'Onbekend'
+        )
+
         template = self.env.get_template("expression.html")
+        return template.render(**context)
+
+    def render_works_index(self, context: Dict[str, Any]) -> str:
+        """Render works index page."""
+        template = self.env.get_template("works_index.html")
         return template.render(**context)
 
     def render_css(self) -> str:
@@ -135,9 +142,12 @@ BASE_TEMPLATE = """<!DOCTYPE html>
 
     <footer class="site-footer">
         <div class="container">
-            <p>© {{ "now"|replace("now", "2026") }} Wetten van Suriname |
-               <a href="{{ base_url }}/about/">Over deze site</a> |
-               <a href="https://github.com/your-org/wetten-van-suriname">Open Source</a>
+            <p>© 2026 Wetten van Suriname - Juridische Database |
+               LexSR Project
+            </p>
+            <p class="footer-note">
+                Deze database bevat {{ total_works if total_works is defined else '550+' }} wetten van Suriname.
+                Voor officiële doeleinden, raadpleeg altijd de originele publicaties.
             </p>
         </div>
     </footer>
@@ -258,23 +268,73 @@ EXPRESSION_TEMPLATE = """{% extends "base.html" %}
                 <span class="badge badge-historical">Historische versie</span>
             {% endif %}
 
+            {% if document_type %}
+                {% if document_type == 'base_law' %}
+                    <span class="badge badge-doc-type badge-base-law">Basiswet</span>
+                {% elif document_type == 'amendment' %}
+                    <span class="badge badge-doc-type badge-amendment">Wijzigingswet</span>
+                {% elif document_type == 'decree' %}
+                    <span class="badge badge-doc-type badge-decree">Besluit</span>
+                {% elif document_type == 'repeal' %}
+                    <span class="badge badge-doc-type badge-repeal">Intrekkingswet</span>
+                {% endif %}
+            {% endif %}
+
             <dl class="law-metadata">
-                <dt>Geldig op:</dt>
-                <dd>{{ expression.version_date.strftime('%d %B %Y') }}</dd>
+                {% if work.date_enacted %}
+                <dt>Datum uitvaardiging:</dt>
+                <dd>{{ work.date_enacted.strftime('%d %B %Y') }}</dd>
+                {% endif %}
 
                 {% if expression.in_force.start %}
                 <dt>In werking:</dt>
                 <dd>{{ expression.in_force.start.strftime('%d %B %Y') }}</dd>
+                {% elif work.date_first_in_force %}
+                <dt>In werking:</dt>
+                <dd>{{ work.date_first_in_force.strftime('%d %B %Y') }}</dd>
                 {% endif %}
 
                 <dt>Status:</dt>
-                <dd>{{ expression.status.value }}</dd>
+                <dd>{{ status_nl }}</dd>
             </dl>
         </div>
 
+        {% if this_amends %}
+        <div class="law-amendments-info">
+            <h3 class="amendments-heading">Deze wet wijzigt:</h3>
+            <ul class="amendments-list">
+                {% for base in this_amends %}
+                <li>
+                    {% if base.id %}
+                        <a href="{{ base_url }}/works/{{ base.id }}/">{{ base.title or 'Onbekende wet' }}</a>
+                    {% else %}
+                        <span class="unresolved-reference">{{ base.reference }}</span>
+                        <span class="badge badge-warning badge-small">Niet gevonden</span>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        {% if amendments_to_this %}
+        <div class="law-amendments-info">
+            <h3 class="amendments-heading">Wijzigingen van deze wet:</h3>
+            <ul class="amendments-list">
+                {% for amendment in amendments_to_this %}
+                <li>
+                    <a href="{{ base_url }}/works/{{ amendment.id }}/">{{ amendment.title }}</a>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
         <div class="law-actions">
             <button class="action-button" onclick="window.print()">Afdrukken</button>
-            <button class="action-button">Download PDF</button>
+            {% if work.source_url %}
+            <a href="{{ work.source_url }}" target="_blank" class="action-button">Bekijk Origineel PDF</a>
+            {% endif %}
             <button class="action-button" id="version-switcher">Andere versies</button>
         </div>
     </header>
@@ -319,8 +379,35 @@ EXPRESSION_TEMPLATE = """{% extends "base.html" %}
         <div class="sidebar-section">
             <h3>Wijzigingsgeschiedenis</h3>
             <div class="timeline">
-                <!-- Timeline would be generated here -->
+                {% if versions and versions|length > 1 %}
+                    {% for v in versions %}
+                    <div class="version-entry{% if v.is_current %} version-entry--current{% endif %}">
+                        <div class="version-dot"></div>
+                        <div class="version-body">
+                            <span class="version-date">{{ v.version_date }}</span>
+                            {% if v.is_current %}
+                            <span class="version-badge version-badge--current">Huidig</span>
+                            {% endif %}
+                            {% if v.staatsblad_ref %}
+                            <span class="version-sb">{{ v.staatsblad_ref }}</span>
+                            {% endif %}
+                            {% if v.amendment_title %}
+                                {% if v.amendment_id %}
+                                <a class="version-amendment-link" href="{{ base_url }}/works/{{ v.amendment_id }}/">{{ v.amendment_title }}</a>
+                                {% else %}
+                                <span class="version-amendment-link">{{ v.amendment_title }}</span>
+                                {% endif %}
+                            {% elif not loop.first %}
+                            <span class="version-amendment-link version-amendment-unknown">Wijziging</span>
+                            {% else %}
+                            <span class="version-amendment-link version-amendment-original">Oorspronkelijke versie</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
                 <p><em>Geen wijzigingen beschikbaar</em></p>
+                {% endif %}
             </div>
         </div>
     </aside>
@@ -507,6 +594,91 @@ body {
     color: #333;
 }
 
+.badge-doc-type {
+    margin-left: 0.5rem;
+}
+
+.badge-base-law {
+    background-color: #0077BB;
+    color: white;
+}
+
+.badge-amendment {
+    background-color: #FF8C00;
+    color: white;
+}
+
+.badge-decree {
+    background-color: #6C757D;
+    color: white;
+}
+
+.badge-repeal {
+    background-color: #DC3545;
+    color: white;
+}
+
+.badge-warning {
+    background-color: #FFC107;
+    color: #333;
+}
+
+.badge-unknown {
+    background-color: #999;
+    color: white;
+}
+
+.badge-small {
+    padding: 0.15rem 0.5rem;
+    font-size: 0.75rem;
+    margin-left: 0.5rem;
+}
+
+.law-amendments-info {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background-color: #F0F8FF;
+    border-left: 4px solid var(--secondary-color);
+    border-radius: 4px;
+}
+
+.amendments-heading {
+    font-size: 1rem;
+    color: var(--primary-color);
+    margin-bottom: 0.75rem;
+    font-weight: 600;
+}
+
+.amendments-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.amendments-list li {
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #D0E8F2;
+}
+
+.amendments-list li:last-child {
+    border-bottom: none;
+}
+
+.amendments-list a {
+    color: var(--secondary-color);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.amendments-list a:hover {
+    text-decoration: underline;
+}
+
+.unresolved-reference {
+    color: #666;
+    font-style: italic;
+}
+
 .law-metadata {
     display: grid;
     grid-template-columns: auto 1fr;
@@ -577,6 +749,104 @@ body {
     padding-left: 0.5rem;
 }
 
+/* Version history timeline (sidebar) */
+.timeline {
+    position: relative;
+    padding-left: 1.25rem;
+}
+
+.timeline::before {
+    content: '';
+    position: absolute;
+    left: 0.35rem;
+    top: 0.25rem;
+    bottom: 0.25rem;
+    width: 2px;
+    background-color: var(--border-color);
+}
+
+.version-entry {
+    position: relative;
+    padding: 0.5rem 0 0.5rem 0.75rem;
+    margin-bottom: 0.25rem;
+}
+
+.version-dot {
+    position: absolute;
+    left: -0.95rem;
+    top: 0.75rem;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: var(--border-color);
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 2px var(--border-color);
+}
+
+.version-entry--current .version-dot {
+    background-color: var(--success-color);
+    box-shadow: 0 0 0 2px var(--success-color);
+}
+
+.version-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.version-date {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--primary-color);
+    font-variant-numeric: tabular-nums;
+}
+
+.version-entry--current .version-date {
+    color: var(--success-color);
+}
+
+.version-badge {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    width: fit-content;
+}
+
+.version-badge--current {
+    background-color: var(--success-color);
+    color: white;
+}
+
+.version-sb {
+    font-size: 0.78rem;
+    color: #555;
+    font-style: italic;
+}
+
+.version-amendment-link {
+    font-size: 0.8rem;
+    color: var(--secondary-color);
+    text-decoration: none;
+    word-break: break-word;
+}
+
+a.version-amendment-link:hover {
+    text-decoration: underline;
+}
+
+.version-amendment-original {
+    color: #888;
+    font-style: italic;
+}
+
+.version-amendment-unknown {
+    color: #888;
+}
+
 /* Footer */
 .site-footer {
     background-color: #f8f9fa;
@@ -609,6 +879,124 @@ body {
     .search-button {
         width: 40%;
     }
+}
+
+/* Action buttons */
+.action-button {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    margin-right: 0.5rem;
+    background-color: var(--secondary-color);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.action-button:hover {
+    background-color: #005fa3;
+}
+
+/* Footer */
+.footer-note {
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: #666;
+}
+
+/* Works index */
+.works-list {
+    margin-top: 2rem;
+}
+
+.work-item {
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    background-color: #f8f9fa;
+    border-left: 4px solid var(--secondary-color);
+    border-radius: 4px;
+}
+
+.work-item h3 {
+    margin: 0 0 0.5rem 0;
+    font-size: 1.2rem;
+}
+
+.work-item h3 a {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+.work-item h3 a:hover {
+    text-decoration: underline;
+}
+
+.work-meta {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.9rem;
+    color: #666;
+}
+
+.work-meta span {
+    display: inline-block;
+}
+
+/* Works index statistics */
+.works-stats {
+    background-color: #f8f9fa;
+    padding: 1.5rem;
+    margin: 2rem 0;
+    border-radius: 8px;
+    border-left: 4px solid var(--secondary-color);
+}
+
+.works-stats h3 {
+    font-size: 1.1rem;
+    color: var(--primary-color);
+    margin-bottom: 1rem;
+}
+
+.stats-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.stats-badges .badge {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+}
+
+/* Works filter */
+.works-filter {
+    margin: 2rem 0;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+}
+
+.works-filter label {
+    font-weight: 600;
+    margin-right: 1rem;
+    color: var(--primary-color);
+}
+
+.filter-select {
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+    border: 2px solid var(--border-color);
+    border-radius: 4px;
+    background-color: white;
+    cursor: pointer;
+    min-width: 200px;
+}
+
+.filter-select:focus {
+    outline: none;
+    border-color: var(--secondary-color);
 }
 
 /* Print styles */
@@ -686,4 +1074,97 @@ JS_TEMPLATE = """
         initVersionSwitcher();
     }
 })();
+"""
+
+WORKS_INDEX_TEMPLATE = """{% extends "base.html" %}
+
+{% block title %}Alle Wetten - {{ site_title }}{% endblock %}
+
+{% block content %}
+<div class="works-index">
+    <h2>Alle Wetten</h2>
+    <p class="lead">
+        {{ total_works }} wetten in de database
+    </p>
+
+    {% if type_counts %}
+    <div class="works-stats">
+        <h3>Documenttypen:</h3>
+        <div class="stats-badges">
+            {% if type_counts.get('base_law') %}
+            <span class="badge badge-base-law">Basiswetten: {{ type_counts['base_law'] }}</span>
+            {% endif %}
+            {% if type_counts.get('amendment') %}
+            <span class="badge badge-amendment">Wijzigingen: {{ type_counts['amendment'] }}</span>
+            {% endif %}
+            {% if type_counts.get('decree') %}
+            <span class="badge badge-decree">Besluiten: {{ type_counts['decree'] }}</span>
+            {% endif %}
+            {% if type_counts.get('repeal') %}
+            <span class="badge badge-repeal">Intrekkingen: {{ type_counts['repeal'] }}</span>
+            {% endif %}
+            {% if type_counts.get('unknown') %}
+            <span class="badge badge-unknown">Onbekend: {{ type_counts['unknown'] }}</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="works-filter">
+        <label for="type-filter">Filter op type:</label>
+        <select id="type-filter" class="filter-select">
+            <option value="all">Alle documenten</option>
+            <option value="base_law">Basiswetten</option>
+            <option value="amendment">Wijzigingen</option>
+            <option value="decree">Besluiten</option>
+            <option value="repeal">Intrekkingen</option>
+            <option value="unknown">Onbekend</option>
+        </select>
+    </div>
+
+    <div class="works-list">
+        {% for item in works %}
+        <div class="work-item" data-type="{{ item.document_type or 'unknown' }}">
+            <h3><a href="{{ base_url }}/works/{{ item.work.id }}/">{{ item.work.title }}</a></h3>
+            <div class="work-meta">
+                {% if item.work.date_enacted %}
+                <span class="work-date">{{ item.work.date_enacted.strftime('%d %B %Y') }}</span>
+                {% endif %}
+
+                {% if item.document_type == 'base_law' %}
+                    <span class="badge badge-base-law badge-small">Basiswet</span>
+                {% elif item.document_type == 'amendment' %}
+                    <span class="badge badge-amendment badge-small">Wijziging</span>
+                {% elif item.document_type == 'decree' %}
+                    <span class="badge badge-decree badge-small">Besluit</span>
+                {% elif item.document_type == 'repeal' %}
+                    <span class="badge badge-repeal badge-small">Intrekking</span>
+                {% else %}
+                    <span class="badge badge-unknown badge-small">Onbekend</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+// Filter works by document type
+document.getElementById('type-filter').addEventListener('change', function(e) {
+    const filterValue = e.target.value;
+    const workItems = document.querySelectorAll('.work-item');
+
+    workItems.forEach(function(item) {
+        if (filterValue === 'all') {
+            item.style.display = '';
+        } else {
+            const itemType = item.getAttribute('data-type');
+            item.style.display = itemType === filterValue ? '' : 'none';
+        }
+    });
+});
+</script>
+{% endblock %}
 """

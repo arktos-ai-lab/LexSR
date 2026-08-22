@@ -12,17 +12,20 @@ This module is the backbone of the system - all other components
 __version__ = "0.3.0"
 
 from .models import (
-    Work,
+    AmendmentLink,
+    AnchorType,
+    Citation,
+    CitationType,
+    DocumentStatus,
     Expression,
-    Manifestation,
     Fragment,
     FragmentAnchor,
-    TemporalExtent,
-    DocumentStatus,
-    SourceType,
-    ManifestationType,
-    AnchorType,
     FragmentType,
+    Manifestation,
+    ManifestationType,
+    SourceType,
+    TemporalExtent,
+    Work,
 )
 
 from .identifiers import (
@@ -32,7 +35,8 @@ from .identifiers import (
     parse_uri,
     build_uri,
     normalize_uri,
-    LAW_ABBREVIATIONS,
+    AbbreviationRegistry,
+    resolve_abbreviation,
 )
 
 from .versioning import (
@@ -69,6 +73,11 @@ __all__ = [
     "ManifestationType",
     "AnchorType",
     "FragmentType",
+    # Citation graph
+    "Citation",
+    "CitationType",
+    # Amendment links
+    "AmendmentLink",
     # URI system
     "LegalURI",
     "URIScheme",
@@ -76,7 +85,8 @@ __all__ = [
     "parse_uri",
     "build_uri",
     "normalize_uri",
-    "LAW_ABBREVIATIONS",
+    "AbbreviationRegistry",
+    "resolve_abbreviation",
     # Versioning
     "VersionChain",
     "VersionDiff",
