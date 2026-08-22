@@ -108,7 +108,7 @@ Your "best database ever" is not one thing. It is a **stack** where every layer 
 
 ## ✅ What's Implemented
 
-### Core Infrastructure (~6,000 LOC)
+### Core Infrastructure (~7,500 LOC)
 
 - ✅ **FRBR Data Model** (`core/models.py`): Work, Expression, Manifestation, Fragment
 - ✅ **ELI-Style URI System** (`core/identifiers.py`): Canonical URIs for every object
@@ -116,9 +116,14 @@ Your "best database ever" is not one thing. It is a **stack** where every layer 
 - ✅ **Citation Resolver** (`core/resolver.py`): Multi-pass reference extraction with context
 - ✅ **SQLite Store** (`core/store.py`): Persistent canonical storage
 - ✅ **Bronze Layer** (`ingestion/bronze.py`): Immutable raw document storage
-- ✅ **REST API** (`api/`): FastAPI application with stdlib fallback
+- ✅ **OCR Pipeline** (`ocr/`): Qwen2.5-VL/Tesseract extraction, structure detection, citation extraction
+- ✅ **Amendment Consolidation** (`consolidation/`): Regex + LLM (local Qwen or OpenRouter) document classifier and amendment-instruction parser
 - ✅ **Evaluation Framework** (`evaluation/`): Metrics, benchmarks, datasets
-- ✅ **Quality Dashboard** (`improvement/`): Continuous improvement loop
+- ✅ **Manual Correction System** (`corrections/`): Web UI for fixing OCR errors, citations, metadata
+- ✅ **Web Scrapers** (`ingestion/scrapers/`): DNA, Belastingdienst (Tax), MAS, SRIS + generic fallback scraper
+- ✅ **Batch Processing** (`ingestion/batch_processor.py`): Bulk PDF ingestion pipeline
+
+The REST API and standalone quality-dashboard modules from earlier prototypes have been removed; retrieval and browsing are currently served through the static site generator (`static_gen/`).
 
 ### What Works Right Now
 
@@ -608,17 +613,31 @@ for ref in refs:
         print(f"Resolved: {ref.raw_text} → {ref.uri}")
 ```
 
-### 3. Run the REST API
+### 3. Launch the manual correction UI
 
 ```bash
-# With FastAPI (if installed)
-uvicorn lexsr.api.app:app --reload
-
-# Or with stdlib HTTP server (no dependencies)
-python -m lexsr.api.app
+python examples/07_correction_ui.py
 ```
 
-Visit http://localhost:8000/docs for the interactive API documentation.
+Visit http://127.0.0.1:5001 to correct OCR errors, citations, and metadata.
+
+See [CORRECTIONS.md](CORRECTIONS.md) for full documentation.
+
+### 4. Use the CLI
+
+```bash
+python -m lexsr stats               # database statistics
+python -m lexsr ingest-pdfs         # OCR pipeline over data/raw/
+python -m lexsr consolidate         # apply amendments to base laws
+python -m lexsr link-citations      # backfill citation links
+python -m lexsr index               # build the BM25 search index
+python -m lexsr generate            # build the static site -> site/
+python -m lexsr serve               # serve the generated site locally
+python -m lexsr search "artikel 4 arbeidswet"
+python -m lexsr benchmark           # run the citation-resolution benchmark
+```
+
+Run `python -m lexsr <command> --help` for per-command options. There is no REST API server currently — retrieval and browsing are served through the generated static site.
 
 ---
 
@@ -632,21 +651,22 @@ Visit http://localhost:8000/docs for the interactive API documentation.
 - ✅ Citation resolver
 - ✅ SQLite canonical store
 - ✅ Bronze layer (immutable raw storage)
-- ✅ Basic REST API
 
-### Phase 2: Ingestion & OCR (🚧 In Progress)
+### Phase 2: Ingestion & OCR (✅ Complete)
 
-- ⬜ PDF OCR pipeline (DeepSeek/Tesseract)
-- ⬜ Structure extraction from OCR text
-- ⬜ Web scrapers for Suriname sources (wetten.sr, DNA, gazettes)
-- ⬜ Silver layer pipeline (Bronze → Canonical)
+- ✅ PDF OCR pipeline (Qwen2.5-VL / Tesseract, with structure detection)
+- ✅ Structure extraction from OCR text
+- ✅ Web scrapers for Suriname sources (DNA, Belastingdienst, MAS, SRIS + generic/SSB)
+- ✅ Batch processor: Bronze → OCR → Canonical, with search indexing
+- ✅ Manual correction system (web UI for data quality)
+- ✅ Amendment consolidation (classify → parse → apply, `lexsr consolidate`)
 - ⬜ Deduplication and quality checks
 
-### Phase 3: Search & Graph (🔜 Next)
+### Phase 3: Search & Graph (🚧 In Progress)
 
-- ⬜ BM25 lexical search
-- ⬜ Vector embeddings (multilingual-e5-large)
-- ⬜ **RuVector-inspired hybrid retrieval** (BM25 + vector + cross-encoder reranking)
+- ✅ BM25 lexical search (`search/bm25.py`)
+- ✅ Vector search + hybrid retrieval + reranker scaffolding (`search/vector.py`, `hybrid.py`, `reranker.py`)
+- ⬜ Production embedding model wiring (multilingual-e5-large) and evaluation against quality targets below
 - ⬜ Citation graph builder
 - ⬜ Amendment chain extractor
 - ⬜ Graph traversal for GraphRAG
@@ -660,13 +680,12 @@ Visit http://localhost:8000/docs for the interactive API documentation.
 - ⬜ Answer synthesis with grounded citations
 - ⬜ Faithfulness checks (citation coverage, contradiction detection)
 
-### Phase 5: Publishing & Sustainability (🔮 Future)
+### Phase 5: Publishing & Sustainability
 
+- ✅ Static site generator (`static_gen/`, `lexsr generate`/`lexsr serve`)
 - ⬜ JSON-LD / RDF exports (Linked Data)
-- ⬜ Static site generator (GitHub Pages)
 - ⬜ SPARQL endpoint (optional)
 - ⬜ Python SDK (PyPI)
-- ⬜ Automated regression tests
 - ⬜ Quality dashboards and alerting
 - ⬜ Community contribution workflows
 
@@ -824,6 +843,24 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **UK legislation.gov.uk**: Akoma Ntoso implementation reference
 - **Estonia Riigi Teataja**: Temporal versioning model
 - **EU EUR-Lex**: Linked data publication patterns
+
+---
+
+## 🔧 Manual Corrections
+
+The system includes a clean web interface for correcting data:
+
+- **Fix OCR errors** - Correct text extraction mistakes
+- **Update citations** - Fix incorrectly parsed references
+- **Adjust metadata** - Correct titles, dates, categories
+- **Full audit trail** - Every correction logged with timestamp, author, reason
+
+```bash
+python examples/07_correction_ui.py
+# Visit http://127.0.0.1:5001
+```
+
+See [CORRECTIONS.md](CORRECTIONS.md) for complete documentation.
 
 ---
 

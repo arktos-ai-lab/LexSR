@@ -68,6 +68,9 @@ dev = [
     "ruff>=0.1.0",
 ]
 
+[project.scripts]
+lexsr = "lexsr.__main__:main"
+
 [project.urls]
 Repository = "https://github.com/your-org/lexsr"
 

@@ -76,7 +76,7 @@ Every layer is **measurable**, **reproducible**, and **traceable** back to offic
 │                       INGESTION LAYER                            │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐  │
 │  │   Scrapers   │  │  OCR Engine  │  │  Structure Extractor │  │
-│  │  (wetten.sr) │  │  (DeepSeek)  │  │  (Akoma Ntoso)       │  │
+│  │  (wetten.sr) │  │  (Qwen2.5-VL)  │  │  (Akoma Ntoso)       │  │
 │  └──────────────┘  └──────────────┘  └──────────────────────┘  │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -98,7 +98,7 @@ Every layer is **measurable**, **reproducible**, and **traceable** back to offic
    ↓
 3. OCR (if PDF)
    ↓
-   Extract text using DeepSeek/Tesseract
+   Extract text using Qwen2.5-VL/Tesseract
    ↓
 4. STRUCTURE EXTRACTION
    ↓
@@ -230,7 +230,7 @@ Every layer is **measurable**, **reproducible**, and **traceable** back to offic
 - `eurlex.py`: EUR-Lex SRU client (for EU law references)
 
 #### `ocr/` (planned)
-- `deepseek.py`: DeepSeek OCR integration
+- `qwen_vl.py`: Qwen2.5-VL OCR integration
 - `tesseract.py`: Tesseract fallback
 - `pdf_extractor.py`: Text extraction from digital PDFs
 

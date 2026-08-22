@@ -409,7 +409,7 @@ Reviewers will check for:
 We especially welcome contributions in these areas:
 
 ### High Priority
-1. **OCR Pipeline**: DeepSeek integration for scanned PDFs
+1. **OCR Pipeline**: Qwen2.5-VL-7B-Instruct integration for scanned PDFs
 2. **Web Scrapers**: wetten.sr, DNA.sr, gazette sources
 3. **Hybrid Search**: RuVector implementation (BM25 + vector + reranking)
 4. **Citation Graph**: Build and visualize citation relationships
