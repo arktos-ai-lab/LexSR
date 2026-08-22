@@ -223,25 +223,64 @@ Every layer is **measurable**, **reproducible**, and **traceable** back to offic
 - Document normalization
 - Fragment extraction
 
-#### `scrapers/` (planned)
-- `wetten_sr.py`: Scraper for wetten.sr
-- `dna_sr.py`: Scraper for DNA.sr (parliament)
-- `gazette.py`: Gazette PDF downloader
-- `eurlex.py`: EUR-Lex SRU client (for EU law references)
+#### `scrapers/` (`src/lexsr/ingestion/scrapers/`)
+- `dna.py`: Scraper for DNA (parliament)
+- `belastingdienst.py`: Scraper for the Tax Authority
+- `mas.py`, `sris.py`: Ministry / legal-database scrapers
+- `generic.py`: Configurable fallback scraper (used for SSB and other sources)
 
-#### `ocr/` (planned)
-- `qwen_vl.py`: Qwen2.5-VL OCR integration
-- `tesseract.py`: Tesseract fallback
-- `pdf_extractor.py`: Text extraction from digital PDFs
-
-#### `extractors/` (planned)
-- `akn_parser.py`: Akoma Ntoso XML parser
-- `structure_detector.py`: ML-based structure extraction
-- `heading_extractor.py`: Heading hierarchy detection
+#### `batch_processor.py`
+- Orchestrates Bronze → OCR → Canonical → search indexing for a scraper or a directory of PDFs
+- Used by `lexsr ingest` and `lexsr ingest-pdfs`
 
 ---
 
-### Search Modules (`src/lexsr/search/`) (planned)
+### OCR Modules (`src/lexsr/ocr/`)
+
+#### `extractor.py`
+- `PDFExtractor`: digital-text extraction with OCR fallback
+- Tesseract (and optional Qwen2.5-VL) engines behind a common `OCREngine` interface
+
+#### `detector.py`
+- Structure detection: articles, paragraphs, headings from raw OCR text
+
+#### `citation_extractor.py`
+- Multi-pass citation extraction from OCR'd fragments (used by `lexsr link-citations`)
+
+#### `pipeline.py`
+- `OCRPipeline`: PDF → OCR → structure detection → FRBR models → citation extraction, end to end
+
+---
+
+### Consolidation Modules (`src/lexsr/consolidation/`)
+
+Two-pass (regex + optional LLM) pipeline that turns wijzigingswetten into
+applied amendments against their base law. Used by `lexsr consolidate`.
+
+#### `classifier.py`
+- `DocumentClassifier`: regex scoring, with an LLM fallback pass for ambiguous documents
+- Classifies base_law / amendment / decree / case_law / regulation / unknown
+
+#### `parser.py`
+- `AmendmentParser`: extracts `AmendmentInstruction`s (replace/insert/repeal/modify) from amendment text
+- LLM pass merges in instructions the regex pass missed or scored low-confidence
+
+#### `llm_client.py`
+- Shared `call_llm()` helper for the classifier/parser LLM fallback
+- Supports both a local vLLM completions endpoint and OpenAI-compatible chat
+  endpoints (e.g. OpenRouter), selected by URL shape
+- API key resolved from an explicit arg, `OPENROUTER_API_KEY`, or a repo-root `.env`
+
+#### `engine.py`
+- `ConsolidationEngine`: applies parsed instructions to the base law's latest
+  expression, creates a new versioned expression, and records `AmendmentLink`s
+
+#### `amendment.py`
+- Shared dataclasses: `AmendmentInstruction`, `OperationType`, `ParsedAmendment`
+
+---
+
+### Search Modules (`src/lexsr/search/`)
 
 #### `bm25.py`
 - SQLite FTS5 or Tantivy integration
@@ -290,24 +329,30 @@ Every layer is **measurable**, **reproducible**, and **traceable** back to offic
 
 ---
 
-### API Modules (`src/lexsr/api/`)
+### CLI (`src/lexsr/__main__.py`)
 
-#### `app.py` (~75 LOC)
-- FastAPI application factory
-- Fallback to stdlib HTTP server (zero-dependency mode)
+There is no REST API server in the current implementation; the `lexsr`
+console script (also runnable as `python -m lexsr`) is the primary
+interface for running the pipeline and serving the output:
 
-#### `routes.py`
-- REST endpoints:
-  - `/provision/{uri}`: Get a specific provision
-  - `/search`: Hybrid search
-  - `/versions/{work_id}`: List all versions
-  - `/citations/{uri}`: Get citation graph
-  - `/resolve`: Resolve reference text to URI
+- `stats` — database statistics (works, fragments, citations, amendment links)
+- `ingest` — scrape all live sources and ingest into the canonical store
+- `ingest-pdfs` — process PDFs already in `data/raw/`
+- `consolidate` — classify, parse, and apply amendments to base laws
+- `link-citations` — backfill citation links for all fragments
+- `index` / `index-vectors` — build the BM25 / dense-vector search indexes
+- `generate` — build the static site
+- `serve` — serve the generated site locally
+- `search <query>` — query the knowledge base (BM25 or hybrid)
+- `benchmark` — run the citation-resolution benchmark suite
 
-#### `schemas.py`
-- Pydantic models for request/response
-- OpenAPI schema generation
-- LLM function-calling contracts
+A prior prototype exposed this functionality via a FastAPI REST layer
+(`src/lexsr/api/`) with Pydantic schemas and an active-learning /
+quality-dashboard module (`src/lexsr/improvement/`); both were removed
+in favor of the CLI + static site approach above. Re-introducing a REST
+API (e.g. for a hosted search UI) remains a reasonable future direction,
+but should be scoped fresh against the current data model rather than
+resurrecting the old code.
 
 ---
 
@@ -324,23 +369,11 @@ Every layer is **measurable**, **reproducible**, and **traceable** back to offic
 - Regression test framework
 
 #### `dataset.py`
-- Test query definitions
-- Expert relevance judgments
-- Ground truth fragment URIs
+- Known-answer seed dataset (`KnownAnswerDataset.suriname_legal_seed()`)
+- Ground truth fragment URIs, organized by category (citation, temporal, ...)
 
----
-
-### Improvement Modules (`src/lexsr/improvement/`)
-
-#### `active_learning.py`
-- Sample hard queries for human review
-- Update abbreviation registry
-- Improve resolver patterns
-
-#### `quality_dashboard.py`
-- Prometheus metrics export
-- Grafana dashboard configs
-- Alerting rules
+#### `structure.py`
+- Structure-quality metrics for OCR output (article/paragraph detection accuracy)
 
 ---
 

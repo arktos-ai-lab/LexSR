@@ -630,10 +630,11 @@ python -m lexsr stats               # database statistics
 python -m lexsr ingest-pdfs         # OCR pipeline over data/raw/
 python -m lexsr consolidate         # apply amendments to base laws
 python -m lexsr link-citations      # backfill citation links
-python -m lexsr index               # build the BM25 search index
-python -m lexsr generate            # build the static site -> site/
-python -m lexsr serve               # serve the generated site locally
-python -m lexsr search "artikel 4 arbeidswet"
+python -m lexsr index                # build the BM25 search index
+python -m lexsr index-vectors        # build the dense vector index (multilingual-e5-large)
+python -m lexsr generate             # build the static site -> site/
+python -m lexsr serve                # serve the generated site locally
+python -m lexsr search "artikel 4 arbeidswet"   # hybrid BM25+vector if a vector index exists
 python -m lexsr benchmark           # run the citation-resolution benchmark
 ```
 
