@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -90,8 +91,8 @@ class VectorIndexer:
             logger.info(f"Created collection: {self.collection_name}")
 
     def _uri_to_id(self, uri: str) -> str:
-        """Convert URI to a stable integer ID for Qdrant."""
-        return hashlib.sha256(uri.encode()).hexdigest()[:16]
+        """Convert a URI to a stable UUID string (Qdrant point IDs must be a uint or UUID)."""
+        return str(uuid.UUID(bytes=hashlib.sha256(uri.encode()).digest()[:16]))
 
     def index_fragment(self, fragment: Fragment, metadata: Dict[str, Any]) -> None:
         """
@@ -147,63 +148,73 @@ class VectorIndexer:
             points=[point],
         )
 
-    def index_fragments(self, fragments: List[tuple[Fragment, Dict[str, Any]]]) -> int:
+    def index_fragments(
+        self,
+        fragments: List[tuple[Fragment, Dict[str, Any]]],
+        batch_size: int = 64,
+    ) -> int:
         """
         Batch index multiple fragments.
 
+        Embeds all fragments in batched `model.encode()` calls (instead of
+        one call per fragment) so GPU/CPU throughput is actually used, then
+        upserts in the same batches.
+
         Args:
             fragments: List of (fragment, metadata) tuples
+            batch_size: Number of fragments per encode/upsert batch
 
         Returns:
             Number of fragments indexed
         """
-        points = []
+        total = 0
 
-        for fragment, metadata in fragments:
-            # Prepare text
-            text_parts = []
-            if fragment.title:
-                text_parts.append(fragment.title)
-            text_parts.append(fragment.text)
-            full_text = " ".join(text_parts)
-            embedding_text = f"passage: {full_text}"
+        for start in range(0, len(fragments), batch_size):
+            chunk = fragments[start:start + batch_size]
 
-            # Generate embedding
-            vector = self.model.encode(embedding_text).tolist()
+            embedding_texts = []
+            for fragment, _ in chunk:
+                text_parts = []
+                if fragment.title:
+                    text_parts.append(fragment.title)
+                text_parts.append(fragment.text)
+                full_text = " ".join(text_parts)
+                embedding_texts.append(f"passage: {full_text}")
 
-            # Prepare payload
-            payload = {
-                "uri": fragment.uri,
-                "work_id": fragment.work_id,
-                "expression_id": fragment.expression_id,
-                "fragment_type": fragment.fragment_type.value,
-                "article_number": fragment.number or "",
-                "heading": fragment.title or "",
-                "heading_path": fragment.heading_path or [],
-                "text_preview": fragment.text[:200],
-                "version_date": metadata.get("version_date"),
-                "work_title": metadata.get("work_title", ""),
-                "in_force_start": metadata.get("in_force_start"),
-                "in_force_end": metadata.get("in_force_end"),
-                "language": metadata.get("language", "nl"),
-                "jurisdiction": metadata.get("jurisdiction", "SR"),
-            }
+            vectors = self.model.encode(embedding_texts, batch_size=batch_size)
 
-            point = self._ps(
-                id=self._uri_to_id(fragment.uri),
-                vector=vector,
-                payload=payload,
+            points = []
+            for (fragment, metadata), vector in zip(chunk, vectors):
+                payload = {
+                    "uri": fragment.uri,
+                    "work_id": fragment.work_id,
+                    "expression_id": fragment.expression_id,
+                    "fragment_type": fragment.fragment_type.value,
+                    "article_number": fragment.number or "",
+                    "heading": fragment.title or "",
+                    "heading_path": fragment.heading_path or [],
+                    "text_preview": fragment.text[:200],
+                    "version_date": metadata.get("version_date"),
+                    "work_title": metadata.get("work_title", ""),
+                    "in_force_start": metadata.get("in_force_start"),
+                    "in_force_end": metadata.get("in_force_end"),
+                    "language": metadata.get("language", "nl"),
+                    "jurisdiction": metadata.get("jurisdiction", "SR"),
+                }
+                points.append(self._ps(
+                    id=self._uri_to_id(fragment.uri),
+                    vector=vector.tolist(),
+                    payload=payload,
+                ))
+
+            self.client.upsert(
+                collection_name=self.collection_name,
+                points=points,
             )
-            points.append(point)
+            total += len(points)
 
-        # Batch upsert
-        self.client.upsert(
-            collection_name=self.collection_name,
-            points=points,
-        )
-
-        logger.info(f"Indexed {len(points)} fragments in vector store")
-        return len(points)
+        logger.info(f"Indexed {total} fragments in vector store")
+        return total
 
     def delete_fragment(self, uri: str) -> bool:
         """Delete a fragment from the index."""
@@ -304,17 +315,17 @@ class VectorSearcher:
                 "match": {"value": work_id},
             })
 
-        # Search
-        search_result = self.client.search(
+        # Search (QdrantClient.search() was removed in favor of query_points())
+        response = self.client.query_points(
             collection_name=self.collection_name,
-            query_vector=query_vector,
+            query=query_vector,
             limit=limit,
             query_filter={"must": filter_conditions} if filter_conditions else None,
         )
 
         # Convert to results
         results = []
-        for rank, hit in enumerate(search_result, start=1):
+        for rank, hit in enumerate(response.points, start=1):
             result = VectorResult(
                 uri=hit.payload["uri"],
                 score=hit.score,

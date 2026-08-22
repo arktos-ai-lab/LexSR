@@ -11,6 +11,7 @@ Commands:
     ingest-pdfs     Process PDFs already in data/raw/
     link-citations  Backfill citation links for all existing fragments
     index           Build / refresh the BM25 search index
+    index-vectors   Build / refresh the dense vector index (embeddings)
     generate        Build the static website from the canonical store
     search <query>  Search the knowledge base (BM25)
     benchmark       Run the citation-resolution benchmark suite
@@ -326,6 +327,64 @@ def cmd_index(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_index_vectors(args: argparse.Namespace) -> int:
+    """Build or refresh the dense vector index (multilingual-e5-large + Qdrant)."""
+    from lexsr.core.store import CanonicalStore
+    from lexsr.search.vector import VectorIndexer
+
+    if not Path(args.db).exists():
+        print(f"Database not found: {args.db}")
+        return 1
+
+    print(f"Loading embedding model {args.model} (first run downloads it)...")
+    indexer = VectorIndexer(model_name=args.model, storage_path=args.vector_db)
+
+    store = CanonicalStore(args.db)
+    works = store.list_works(limit=100_000)
+
+    batch = []
+    total_indexed = 0
+
+    print(f"Building vector index: {args.db} -> {args.vector_db}")
+
+    for i, work in enumerate(works, 1):
+        expressions = store.get_expressions_for_work(work.id)
+        if not expressions:
+            continue
+        for expr in expressions:
+            fragments = store.get_fragments_for_expression(expr.id)
+            for frag in fragments:
+                if not frag.text:
+                    continue
+                metadata = {
+                    "work_title": work.title,
+                    "version_date": expr.version_date.isoformat() if expr.version_date else "",
+                    "in_force_start": (
+                        expr.in_force.start.isoformat() if expr.in_force and expr.in_force.start else ""
+                    ),
+                    "in_force_end": (
+                        expr.in_force.end.isoformat()
+                        if expr.in_force and expr.in_force.end
+                        else ""
+                    ),
+                }
+                batch.append((frag, metadata))
+
+        if len(batch) >= args.batch_size:
+            total_indexed += indexer.index_fragments(batch, batch_size=args.batch_size)
+            batch = []
+
+        if i % 100 == 0 or i == len(works):
+            print(f"  [{i}/{len(works)}]  indexed so far: {total_indexed:,}")
+
+    if batch:
+        total_indexed += indexer.index_fragments(batch, batch_size=args.batch_size)
+
+    store.close()
+    print(f"Indexed {total_indexed:,} fragments in vector store ({args.vector_db}).")
+    return 0
+
+
 def cmd_generate(args: argparse.Namespace) -> int:
     """Generate the complete static website."""
     from lexsr.core.store import CanonicalStore
@@ -362,10 +421,15 @@ def cmd_search(args: argparse.Namespace) -> int:
 
     from lexsr.search.hybrid import HybridSearchEngine
 
+    use_vector = not args.no_hybrid and Path(args.vector_db).exists()
+    if not args.no_hybrid and not use_vector:
+        print(f"(vector index not found at {args.vector_db} — BM25-only; "
+              f"run 'lexsr index-vectors' to enable hybrid search)")
+
     engine = HybridSearchEngine(
         bm25_db_path=search_db,
         vector_db_path=args.vector_db,
-        use_vector=False,  # BM25-only unless vector index exists
+        use_vector=use_vector,
     )
     results = engine.search(args.query, top_k=args.top_k)
 
@@ -893,6 +957,12 @@ def build_parser() -> argparse.ArgumentParser:
     # index
     sub.add_parser("index", help="Build / refresh the BM25 search index")
 
+    # index-vectors
+    p = sub.add_parser("index-vectors", help="Build / refresh the dense vector index")
+    p.add_argument("--vector-db", default=DEFAULT_VECTOR_DB, metavar="PATH")
+    p.add_argument("--model", default="intfloat/multilingual-e5-large", metavar="NAME")
+    p.add_argument("--batch-size", type=int, default=64, metavar="N")
+
     # generate
     p = sub.add_parser("generate", help="Build the static website")
     p.add_argument("--output", default=DEFAULT_SITE_DIR, metavar="DIR")
@@ -903,6 +973,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("query", nargs="+")
     p.add_argument("--top-k", type=int, default=10, metavar="N")
     p.add_argument("--vector-db", default=DEFAULT_VECTOR_DB, metavar="PATH")
+    p.add_argument("--no-hybrid", action="store_true",
+                   help="Force BM25-only search even if a vector index exists")
 
     # benchmark
     p = sub.add_parser("benchmark", help="Run the citation benchmark suite")
@@ -931,6 +1003,7 @@ def main() -> None:
         "consolidate":      cmd_consolidate,
         "link-citations":   cmd_link_citations,
         "index":            cmd_index,
+        "index-vectors":    cmd_index_vectors,
         "generate":    cmd_generate,
         "search":      cmd_search,
         "benchmark":   cmd_benchmark,

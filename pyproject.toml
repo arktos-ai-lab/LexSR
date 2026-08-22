@@ -46,8 +46,8 @@ ocr = [
     "Pillow>=9.0",
 ]
 search = [
-    "chromadb>=0.4",
     "sentence-transformers>=2.0",
+    "qdrant-client>=1.7",
 ]
 scraper = [
     "httpx>=0.24",
