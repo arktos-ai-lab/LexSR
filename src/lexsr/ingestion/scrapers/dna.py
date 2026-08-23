@@ -128,6 +128,10 @@ class DNAScraper(BaseScraper):
     def _extract_documents(self, html: str, base_url: str) -> List[ScrapedDocument]:
         """Extract documents from legislation page."""
         documents = []
+        # These are our own category-archive pages (self.legislation_urls) —
+        # they contain "wet" like every other DNA URL, so the keyword filter
+        # below would otherwise treat cross-links between them as documents.
+        own_category_urls = {u.rstrip('/') for u in self.legislation_urls}
 
         try:
             from bs4 import BeautifulSoup
@@ -152,6 +156,13 @@ class DNAScraper(BaseScraper):
                 )
 
                 if is_relevant:
+                    # Build absolute URL
+                    from urllib.parse import urljoin
+                    absolute_url = urljoin(base_url, href)
+
+                    if absolute_url.rstrip('/') in own_category_urls:
+                        continue
+
                     # Get link text as title
                     title = self._normalize_title(link.get_text())
 
@@ -160,10 +171,6 @@ class DNAScraper(BaseScraper):
                         parent = link.find_parent(['td', 'li', 'div'])
                         if parent:
                             title = self._normalize_title(parent.get_text())
-
-                    # Build absolute URL
-                    from urllib.parse import urljoin
-                    absolute_url = urljoin(base_url, href)
 
                     # Determine document type
                     doc_type = "pdf" if self._is_pdf_url(absolute_url) else "html"
