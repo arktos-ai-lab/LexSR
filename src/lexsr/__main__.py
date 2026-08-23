@@ -56,6 +56,30 @@ def _setup_tesseract() -> bool:
     return False
 
 
+def _tesseract_lang(preferred: str = "nld+eng", fallback: str = "eng") -> str:
+    """
+    Pick a Tesseract language string from what's actually installed.
+
+    Requesting a language whose .traineddata isn't installed makes every
+    single OCR call fail outright, so check availability first rather than
+    hardcoding "nld" (not installed on every machine that has Tesseract).
+    """
+    try:
+        import pytesseract
+        available = set(pytesseract.get_languages(config=""))
+    except Exception:
+        return fallback
+
+    wanted = preferred.split("+")
+    usable = [lang for lang in wanted if lang in available]
+    if usable:
+        return "+".join(usable)
+
+    print(f"WARNING: none of {wanted} installed for Tesseract (have: {sorted(available)}); "
+          f"using '{fallback}'. Install missing traineddata files for better Dutch OCR quality.")
+    return fallback
+
+
 # ---------------------------------------------------------------------------
 # Default paths
 # ---------------------------------------------------------------------------
@@ -137,7 +161,7 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     initial = store.stats()
     store.close()
 
-    ocr_config = PipelineConfig(ocr_engine=OCREngine.TESSERACT, tesseract_lang="nld")
+    ocr_config = PipelineConfig(ocr_engine=OCREngine.TESSERACT, tesseract_lang=_tesseract_lang())
     processor = BatchProcessor(
         raw_dir=Path(args.raw_dir),
         canonical_db=args.db,
@@ -187,13 +211,38 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     return 0
 
 
+def _title_from_pdf_filename(name: str) -> str:
+    """Derive a human title from a PDF filename (matches the scheme already
+    used for the existing works, so titles stay consistent)."""
+    import re as _re
+    stem = _re.sub(r'^\d+[._]', '', name)
+    stem = stem.replace('_', ' ').replace('-', ' ')
+    stem = _re.sub(r'\s+', ' ', stem).strip()
+    return (stem or name)[:100]
+
+
+def _work_id_from_title(title: str) -> str:
+    """Slug + hash suffix, matching the scheme used for the existing works."""
+    import re as _re
+    import hashlib as _hashlib
+    slug = _re.sub(r'[^a-z0-9\s-]', '', title.lower())
+    slug = _re.sub(r'\s+', '-', slug).strip('-')[:80]
+    suffix = _hashlib.md5(title.encode()).hexdigest()[:8]
+    return f"{slug}-{suffix}"
+
+
 def cmd_ingest_pdfs(args: argparse.Namespace) -> int:
-    """Process all PDFs in data/raw/ through the OCR pipeline."""
+    """Process all PDFs in data/raw/ through the OCR pipeline.
+
+    Skips PDFs already ingested, matched by content checksum against
+    existing expressions (safe to re-run after adding new PDFs).
+    """
     if not _setup_tesseract():
         print("WARNING: Tesseract not found. Skipping OCR.")
 
-    from lexsr.ingestion.batch_processor import BatchProcessor
-    from lexsr.ocr.pipeline import PipelineConfig
+    import hashlib
+    from datetime import date
+    from lexsr.ocr.pipeline import OCRPipeline, PipelineConfig
     from lexsr.ocr.extractor import OCREngine
     from lexsr.core.store import CanonicalStore
 
@@ -207,66 +256,52 @@ def cmd_ingest_pdfs(args: argparse.Namespace) -> int:
 
     store = CanonicalStore(args.db)
     initial = store.stats()
-    store.close()
 
-    ocr_config = PipelineConfig(ocr_engine=OCREngine.TESSERACT, tesseract_lang="nld")
-    processor = BatchProcessor(
-        raw_dir=raw_dir,
-        canonical_db=args.db,
-        search_db=args.search_db,
-        ocr_config=ocr_config,
-    )
+    ocr_config = PipelineConfig(ocr_engine=OCREngine.TESSERACT, tesseract_lang=_tesseract_lang())
+    pipeline = OCRPipeline(ocr_config)
 
-    from lexsr.ingestion.scrapers.base import BronzeRecord, SourceType
-    from lexsr.ingestion.bronze import BronzeStore
-    import hashlib
-    from datetime import date
-
-    bronze = BronzeStore(str(Path(args.db).parent / "bronze.db"))
     processed = skipped = failed = 0
 
     for i, pdf_path in enumerate(pdfs, 1):
         if i % 20 == 1:
             print(f"  [{i}/{len(pdfs)}] processing...")
         try:
-            content = pdf_path.read_bytes()
-            checksum = hashlib.sha256(content).hexdigest()
-            title = pdf_path.stem.replace("_", " ").replace("-", " ").strip()[:100]
-            record = BronzeRecord(
-                id=f"pdf-{checksum[:16]}",
-                source_url=pdf_path.as_uri(),
-                title=title,
-                content=content,
-                content_type="application/pdf",
-                source_type=SourceType.LEGISLATION,
-                scraped_at=date.today().isoformat(),
-            )
-            is_new = bronze.store(record)
-            if not is_new:
+            checksum = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
+            already = store._conn.execute(
+                "SELECT 1 FROM expressions WHERE checksum = ? LIMIT 1", (checksum,)
+            ).fetchone()
+            if already:
                 skipped += 1
                 continue
-            from lexsr.ingestion.silver import SilverProcessor
-            from lexsr.core.store import CanonicalStore as CS
-            sp = SilverProcessor()
-            result = sp.process(record)
-            if result.success:
-                cs = CS(args.db)
-                if result.work:
-                    cs.save_work(result.work)
-                for expr in result.expressions:
-                    cs.save_expression(expr)
-                for frag in result.fragments:
-                    cs.save_fragment(frag)
-                cs.close()
-                processed += 1
-            else:
+
+            title = _title_from_pdf_filename(pdf_path.stem)
+            work_id = _work_id_from_title(title)
+
+            result = pipeline.process_pdf(
+                pdf_path=str(pdf_path),
+                work_id=work_id,
+                title=title,
+                version_date=date.today(),
+            )
+
+            if not result.success or not result.fragments:
                 failed += 1
+                if failed <= 5:
+                    print(f"    FAIL {pdf_path.name}: {'; '.join(result.errors) or 'no fragments extracted'}")
+                continue
+
+            result.expression.checksum = checksum
+            store.save_work(result.work)
+            store.save_expression(result.expression)
+            for fragment in result.fragments:
+                store.save_fragment(fragment)
+            processed += 1
+
         except Exception as exc:
             failed += 1
             if failed <= 5:
                 print(f"    FAIL {pdf_path.name}: {exc}")
 
-    store = CanonicalStore(args.db)
     final = store.stats()
     store.close()
 
@@ -640,8 +675,12 @@ def cmd_consolidate(args: argparse.Namespace) -> int:
         return 1
 
     store = CanonicalStore(args.db)
-    classifier = DocumentClassifier(use_llm=False)
-    parser = AmendmentParser(use_llm=False)
+    classifier = DocumentClassifier(
+        use_llm=args.use_llm, llm_url=args.llm_url, model=args.llm_model,
+    )
+    parser = AmendmentParser(
+        use_llm=args.use_llm, llm_url=args.llm_url, model=args.llm_model,
+    )
     engine = ConsolidationEngine(store)
 
     works = store.list_works(limit=100_000)
@@ -950,6 +989,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--show-errors", action="store_true",
                    help="Print error details for unresolvable amendments")
     p.add_argument("--verbose", "-v", action="store_true")
+    p.add_argument("--use-llm", action="store_true",
+                   help="Enable the LLM fallback pass for low-confidence classification/parsing")
+    p.add_argument("--llm-url", default="http://localhost:8000/v1/completions", metavar="URL",
+                   help="Completions endpoint (local vLLM, or an OpenAI-compatible chat endpoint)")
+    p.add_argument("--llm-model", default="Qwen/Qwen2.5-Coder-7B-Instruct", metavar="NAME")
 
     # link-citations
     sub.add_parser("link-citations", help="Backfill citation links for all existing fragments")
