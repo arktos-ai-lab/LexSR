@@ -918,7 +918,7 @@ def _llm_parse_section(
         llm_url=llm_url,
         model=model,
         temperature=temperature,
-        max_tokens=2048,
+        max_tokens=8000,
         api_key=api_key,
         timeout=LLM_TIMEOUT,
     )

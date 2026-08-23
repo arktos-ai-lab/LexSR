@@ -97,9 +97,16 @@ def call_llm(
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             body = json.loads(resp.read().decode("utf-8"))
-        if is_chat:
-            return body["choices"][0]["message"]["content"].strip()
-        return body["choices"][0]["text"].strip()
+        text = (
+            body["choices"][0]["message"]["content"]
+            if is_chat
+            else body["choices"][0]["text"]
+        )
+        if not text:
+            logger.warning("LLM returned empty content (finish_reason=%s)",
+                            body["choices"][0].get("finish_reason"))
+            return None
+        return text.strip()
     except (urllib.error.URLError, KeyError, IndexError, json.JSONDecodeError, OSError) as exc:
         logger.warning("LLM call failed: %s", exc)
         return None

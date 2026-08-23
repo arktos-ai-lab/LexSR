@@ -490,12 +490,15 @@ def _llm_classify(
     excerpt = (title + "\n\n" + text)[:CONTEXT_CHARS]
     prompt = _LLM_PROMPT_TEMPLATE.format(text=excerpt, n_chars=len(excerpt))
 
+    # Reasoning models (e.g. OpenRouter's stealth/ox-alpha) spend part of the
+    # token budget on hidden reasoning before emitting the JSON answer; too
+    # low a cap returns empty content (finish_reason="length") every time.
     raw_text = call_llm(
         prompt=prompt,
         llm_url=llm_url,
         model=model,
         temperature=temperature,
-        max_tokens=512,
+        max_tokens=1500,
         api_key=api_key,
         timeout=LLM_TIMEOUT,
     )
