@@ -198,10 +198,13 @@ class OCRPipeline:
             result.expression = expression
             result.fragments = fragments
 
-            # Step 3.5: Extract citations from fragments
-            logger.info("Step 3.5: Extracting citations...")
-            citations_extracted = self._extract_citations(fragments, expression)
-            logger.info(f"Extracted {citations_extracted} citations from fragments")
+            # Citation extraction needs a CanonicalStore to resolve references
+            # against, which isn't available mid-pipeline (fragments aren't
+            # stored yet) — that's what `lexsr link-citations` is for, run
+            # after storage. An in-pipeline attempt used to run here with
+            # CitationExtractor(store=None), which can only ever return an
+            # empty list; it was pure overhead (one warning log per fragment,
+            # every single ingestion run) with no effect.
 
             # Step 4: Validate (optional)
             if self.config.validate_structure:
@@ -371,59 +374,6 @@ class OCRPipeline:
                     fragments.append(para_fragment)
 
         return work, expression, fragments
-
-    def _extract_citations(self, fragments: List[Fragment], expression: Expression) -> int:
-        """
-        Extract citations from all fragments.
-
-        Args:
-            fragments: List of fragments to extract citations from
-            expression: The expression these fragments belong to
-
-        Returns:
-            Total number of citations extracted
-        """
-        try:
-            from ..ocr.citation_extractor import CitationExtractor
-
-            extractor = CitationExtractor(store=None)  # No store in pipeline, just extract
-            total_citations = 0
-
-            for fragment in fragments:
-                if not fragment.text:
-                    continue
-
-                # Extract citations from fragment (correct method!)
-                citations = extractor.extract_from_fragment(
-                    fragment=fragment,
-                    source_version_date=expression.version_date,
-                )
-
-                # Store citations in fragment metadata
-                if citations:
-                    fragment.metadata = fragment.metadata or {}
-                    fragment.metadata["citations"] = [
-                        {
-                            "target_uri": c.target_uri,
-                            "source_version_date": c.source_version_date.isoformat() if c.source_version_date else None,
-                            "target_version_date": c.target_version_date.isoformat() if c.target_version_date else None,
-                            "valid_from": c.valid_from.isoformat() if c.valid_from else None,
-                            "valid_to": c.valid_to.isoformat() if c.valid_to else None,
-                            "raw_text": c.raw_text,
-                            "confidence": c.confidence,
-                        }
-                        for c in citations
-                    ]
-                    total_citations += len(citations)
-
-            return total_citations
-
-        except ImportError as e:
-            logger.warning(f"Citation extraction unavailable: {e}")
-            return 0
-        except Exception as e:
-            logger.error(f"Citation extraction failed: {e}", exc_info=True)
-            return 0
 
     def _validate_result(self, result: PipelineResult) -> List[str]:
         """Validate pipeline result for common issues."""
