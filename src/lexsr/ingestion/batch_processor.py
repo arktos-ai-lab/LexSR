@@ -755,11 +755,16 @@ class BatchProcessor:
         # Convert to lowercase, remove special chars, limit length
         work_id = title.lower()
         work_id = "".join(c if c.isalnum() or c == ' ' else '' for c in work_id)
-        work_id = work_id.strip().replace(' ', '-')[:50]
+        normalized = " ".join(work_id.split())  # collapse whitespace, matches hash input below
+        work_id = normalized.replace(' ', '-')[:50]
 
-        # Add timestamp to ensure uniqueness
+        # Add a hash suffix for uniqueness. Hash the SAME normalized form
+        # used for the slug (not the raw title) — otherwise re-scraping the
+        # same document with trivial title differences (case, whitespace,
+        # punctuation) produces a different work_id and a silent duplicate
+        # work, since _document_exists dedup doesn't catch this either.
         import hashlib
-        hash_suffix = hashlib.md5(title.encode()).hexdigest()[:8]
+        hash_suffix = hashlib.md5(normalized.encode()).hexdigest()[:8]
         work_id = f"{work_id}-{hash_suffix}"
 
         return work_id
