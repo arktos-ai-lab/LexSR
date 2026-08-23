@@ -169,11 +169,18 @@ def _resolve_base_work(
         if _normalize_ref(work.title) == norm_ref:
             return work
 
-    # 3: substring — ref is contained in title or title is contained in ref
-    for work in works:
-        norm_title = _normalize_ref(work.title)
-        if norm_ref in norm_title or norm_title in norm_ref:
-            return work
+    # 3: substring — ref is contained in title or title is contained in ref.
+    # A very short normalized string (OCR noise, a stray single letter) is a
+    # substring of almost everything, so require a minimum length before
+    # trusting either direction of the containment check.
+    MIN_SUBSTRING_LEN = 4
+    if len(norm_ref) >= MIN_SUBSTRING_LEN:
+        for work in works:
+            norm_title = _normalize_ref(work.title)
+            if len(norm_title) < MIN_SUBSTRING_LEN:
+                continue
+            if norm_ref in norm_title or norm_title in norm_ref:
+                return work
 
     # 4: year + at least 2 distinctive words
     year_m = re.search(r'\b(\d{4})\b', raw_ref)

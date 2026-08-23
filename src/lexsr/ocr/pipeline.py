@@ -303,13 +303,20 @@ class OCRPipeline:
     ) -> Tuple[Work, Expression, List[Fragment]]:
         """Convert detected structure to FRBR models."""
 
+        # A detected heading that's implausibly short (misread OCR noise, a
+        # stray page number, a single letter) is worse than the caller's own
+        # title — using it anyway makes fuzzy title-matching (e.g. amendment
+        # base-law resolution) match this work against nearly everything.
+        detected_title = structure.title if structure.title and len(structure.title.strip()) >= 5 else None
+        resolved_title = detected_title or title
+
         # Create Work
         work = Work(
             id=work_id,
             uri=f"/id/law/{work_id}",
             source_type=self.config.default_source_type,
             official_id=official_id,
-            title=structure.title or title,
+            title=resolved_title,
             document_type="wet",
             jurisdiction=self.config.default_jurisdiction,
             language=self.config.default_language,
@@ -323,7 +330,7 @@ class OCRPipeline:
             work_id=work.id,
             work_uri=work.uri,
             version_date=version_date,
-            title=structure.title or title,
+            title=resolved_title,
             status=DocumentStatus.IN_FORCE,
             in_force=TemporalExtent(start=version_date, end=None),
         )
