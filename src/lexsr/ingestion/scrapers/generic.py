@@ -135,6 +135,21 @@ class GenericGovernmentScraper(BaseScraper):
                             result.documents.append(doc)
                             seen_urls.add(post_url)
 
+            # Fallback discovery (year-directory guessing, site search) is
+            # expensive — up to ~250 requests per source, mostly 404s on
+            # sites that don't use those URL schemes at all. Only try it
+            # when direct link extraction from the legislation page came up
+            # short; skip it when that page already yielded real results.
+            FALLBACK_THRESHOLD = 5
+
+            if len(result.documents) >= FALLBACK_THRESHOLD:
+                logger.info(
+                    f"Found {len(result.documents)} documents directly; "
+                    f"skipping year-directory/search fallback discovery"
+                )
+                logger.info(f"Total unique documents: {len(result.documents)}")
+                return result
+
             # Try year-based directory crawling (discover documents in /YYYY/ paths)
             logger.info(f"Crawling year-based directories...")
             year_doc_urls = self._crawl_year_directories(self.base_url)
@@ -367,13 +382,19 @@ class GenericGovernmentScraper(BaseScraper):
 # Factory functions for all sources
 
 def create_ssb_scraper(rate_limit: float = 2.0) -> GenericGovernmentScraper:
-    """Stichting Staatsolie Bewaar - State Oil."""
+    """Surinaams Standaarden Bureau (Suriname Standards Bureau) — NOT the
+    state oil company (that's Staatsolie, an unrelated entity/domain).
+    ssb.sr publishes the Standaardenwet, its amendments, and technical
+    regulations (labeling, food safety, product specifications) as plain
+    links under /media/{id}/{filename}.pdf on a single listing page —
+    no pagination, no year-based archive structure."""
     return GenericGovernmentScraper(
         base_url="https://www.ssb.sr",
         source_name="ssb",
         legislation_url="https://www.ssb.sr/over-ssb/wet-en-regelgeving/",
-        keywords=["wet", "regeling", "regulation", "petroleum", "oil", "olie"],
-        description="State oil regulations, petroleum laws",
+        keywords=["wet", "regeling", "regulation", "standaard", "standard",
+                   "beschikking", "technisch voorschrift"],
+        description="Suriname Standards Bureau — standards law and technical regulations",
         rate_limit=rate_limit,
     )
 
