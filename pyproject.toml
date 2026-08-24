@@ -59,8 +59,11 @@ static = [
 eval = [
     "numpy>=1.24",
 ]
+graph = [
+    "networkx>=3.0",
+]
 all = [
-    "lexsr[api,ingestion,ocr,search,scraper,static,eval]",
+    "lexsr[api,ingestion,ocr,search,scraper,static,eval,graph]",
 ]
 dev = [
     "pytest>=7.0",

@@ -16,6 +16,7 @@ Commands:
     generate        Build the static website from the canonical store
     search <query>  Search the knowledge base (BM25)
     benchmark       Run the citation-resolution benchmark suite
+    build-graph     Build the unified knowledge graph (citations, amendments, case law)
     serve           Serve the generated site locally
 """
 
@@ -627,6 +628,44 @@ def cmd_benchmark(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_build_graph(args: argparse.Namespace) -> int:
+    """Build the unified knowledge graph (legislation citations, amendments, case law)."""
+    from lexsr.core.store import CanonicalStore
+    from lexsr.graph import build_graph, graph_stats, export_graphml, export_json_summary
+
+    if not Path(args.db).exists():
+        print(f"Database not found: {args.db}")
+        return 1
+
+    store = CanonicalStore(args.db)
+    print("Building knowledge graph...")
+    g = build_graph(store)
+    store.close()
+
+    stats = graph_stats(g)
+    print(f"\nNodes: {stats['nodes']:,}")
+    for node_type, count in sorted(stats['node_types'].items(), key=lambda x: -x[1]):
+        print(f"  {node_type:20s} {count:,}")
+    print(f"\nEdges: {stats['edges']:,}")
+    for edge_type, count in sorted(stats['edge_types'].items(), key=lambda x: -x[1]):
+        print(f"  {edge_type:20s} {count:,}")
+    print(f"\nConnected components: {stats['connected_components']:,} "
+          f"(largest: {stats['largest_component_size']:,} nodes)")
+    print(f"Isolated nodes: {stats['isolated_nodes']:,}")
+    print("\nMost-cited works:")
+    for entry in stats['top_cited_works'][:10]:
+        print(f"  [{entry['in_degree']:>3}] {entry['title'][:70]}")
+
+    export_graphml(g, args.output)
+    print(f"\nGraphML written to: {args.output}")
+
+    if args.stats_output:
+        export_json_summary(stats, args.stats_output)
+        print(f"Stats JSON written to: {args.stats_output}")
+
+    return 0
+
+
 def cmd_serve(args: argparse.Namespace) -> int:
     """Serve the static site with Python's built-in HTTP server."""
     import http.server
@@ -1130,6 +1169,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("benchmark", help="Run the citation benchmark suite")
     p.add_argument("--verbose", "-v", action="store_true")
 
+    # build-graph
+    p = sub.add_parser("build-graph", help="Build the unified knowledge graph")
+    p.add_argument("--output", default="data/knowledge_graph.graphml", metavar="PATH")
+    p.add_argument("--stats-output", default="data/knowledge_graph_stats.json", metavar="PATH")
+
     # serve
     p = sub.add_parser("serve", help="Serve the static site locally")
     p.add_argument("--site", default=DEFAULT_SITE_DIR, metavar="DIR")
@@ -1158,6 +1202,7 @@ def main() -> None:
         "generate":    cmd_generate,
         "search":      cmd_search,
         "benchmark":   cmd_benchmark,
+        "build-graph": cmd_build_graph,
         "serve":       cmd_serve,
     }
 
