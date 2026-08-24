@@ -43,9 +43,12 @@ data_*/
 # Generated static site output
 site/
 
-# Test files
-test_*.py
-*_test.py
+# Ad hoc test/scratch scripts at the repo root only — NOT tests/, which is
+# the real pytest suite (a bare "test_*.py" here would silently un-track
+# every new file added to tests/, since gitignore patterns without a
+# leading "/" match at any depth).
+/test_*.py
+/*_test.py
 
 # Databases (generated)
 *.db
