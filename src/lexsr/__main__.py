@@ -9,6 +9,7 @@ Commands:
     stats           Show database statistics
     ingest          Scrape and ingest from all live sources (requires network)
     ingest-pdfs     Process PDFs already in data/raw/
+    ingest-caselaw  Scrape rechtspraak.sr court decisions
     link-citations  Backfill citation links for all existing fragments
     index           Build / refresh the BM25 search index
     index-vectors   Build / refresh the dense vector index (embeddings)
@@ -150,8 +151,11 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         print("WARNING: Tesseract not found. OCR quality may be reduced.")
 
     from lexsr.ingestion.batch_processor import BatchProcessor
-    from lexsr.ingestion.scrapers import DNAScraper, SRISScraper, BelastingdienstScraper
-    from lexsr.ingestion.scrapers.generic import create_ssb_scraper
+    from lexsr.ingestion.scrapers import DNAScraper, SRISScraper, BelastingdienstScraper, MASScraper
+    from lexsr.ingestion.scrapers.generic import (
+        create_ssb_scraper, create_gov_portal_scraper, create_finance_scraper,
+        create_labor_scraper, create_natural_resources_scraper, create_chs_scraper,
+    )
     from lexsr.ocr.pipeline import PipelineConfig
     from lexsr.ocr.extractor import OCREngine
     from lexsr.core.store import CanonicalStore
@@ -169,11 +173,21 @@ def cmd_ingest(args: argparse.Namespace) -> int:
         ocr_config=ocr_config,
     )
 
+    # The other generic-scraper sources (justice, agriculture, nimos, health,
+    # education, kos) either 404 on every guessed URL or reliably time out —
+    # their legislation_url in scrapers/generic.py needs to be corrected
+    # against the real site structure before they're worth including here.
     scrapers = [
         ("DNA (Parliament)",           DNAScraper(rate_limit=2.0)),
         ("SRIS (Legal Database)",       SRISScraper(rate_limit=2.0)),
         ("Belastingdienst (Tax Auth.)", BelastingdienstScraper(rate_limit=2.0)),
-        ("SSB (State Oil)",             create_ssb_scraper(rate_limit=3.0)),
+        ("MAS (Central Bank)",          MASScraper(rate_limit=2.0)),
+        ("SSB (Standards Bureau)",      create_ssb_scraper(rate_limit=3.0)),
+        ("Gov Portal",                  create_gov_portal_scraper(rate_limit=2.0)),
+        ("Finance Ministry",            create_finance_scraper(rate_limit=2.0)),
+        ("Labor Ministry",              create_labor_scraper(rate_limit=2.0)),
+        ("Natural Resources Ministry",  create_natural_resources_scraper(rate_limit=2.0)),
+        ("CHS (Electoral Bureau)",      create_chs_scraper(rate_limit=2.0)),
     ]
 
     totals = dict(scraped=0, processed=0, stored=0, failed=0)
@@ -207,6 +221,89 @@ def cmd_ingest(args: argparse.Namespace) -> int:
     print(
         f"Done — added {final.get('works', 0) - initial.get('works', 0)} works, "
         f"{final.get('fragments', 0) - initial.get('fragments', 0):,} fragments"
+    )
+    return 0
+
+
+def cmd_ingest_caselaw(args: argparse.Namespace) -> int:
+    """Scrape rechtspraak.sr and ingest court decisions into the canonical store."""
+    from lexsr.core.store import CanonicalStore
+    from lexsr.ingestion.scrapers.rechtspraak import RechtspraakScraper
+    from lexsr.ingestion.caselaw_pipeline import CaseLawPipeline
+    from lexsr.ocr.citation_extractor import CitationExtractor
+
+    store = CanonicalStore(args.db)
+    initial = store.stats()
+
+    scraper = RechtspraakScraper(rate_limit=args.rate_limit)
+    pipeline = CaseLawPipeline()
+    citation_extractor = CitationExtractor(store)
+
+    print(f"Discovering decisions from rechtspraak.sr{f' (limit {args.limit})' if args.limit else ''}...")
+    urls = scraper.discover_decision_urls()
+    if args.limit:
+        urls = urls[:args.limit]
+    print(f"{len(urls)} decisions to process")
+
+    processed = skipped = failed = 0
+    total_fragments = 0
+    total_case_citations = 0
+    total_legislation_citations = 0
+
+    for i, url in enumerate(urls, 1):
+        if i % 25 == 1:
+            print(f"  [{i}/{len(urls)}] processing...")
+
+        try:
+            doc = scraper.scrape_decision(url)
+            if not doc:
+                failed += 1
+                continue
+
+            result = pipeline.process_document(doc)
+            if not result.success:
+                failed += 1
+                if args.verbose:
+                    print(f"    FAIL {url}: {'; '.join(result.errors)}")
+                continue
+
+            existing = store.get_work(result.work.id)
+            if existing and not args.force:
+                skipped += 1
+                continue
+
+            store.save_work(result.work)
+            store.save_expression(result.expression)
+            for fragment in result.fragments:
+                store.save_fragment(fragment)
+            for citation in result.citations:
+                store.save_citation(citation)
+
+            legislation_citations = citation_extractor.extract_from_fragments(
+                result.fragments, source_version_date=result.expression.version_date,
+            )
+            saved = citation_extractor.save_to_store(legislation_citations)
+
+            processed += 1
+            total_fragments += len(result.fragments)
+            total_case_citations += len(result.citations)
+            total_legislation_citations += saved
+
+        except Exception as exc:
+            failed += 1
+            if args.verbose:
+                print(f"    EXCEPTION {url}: {exc}")
+
+    final = store.stats()
+    store.close()
+
+    print(f"\nResults: processed={processed}  skipped={skipped}  failed={failed}")
+    print(f"  Considerations extracted: {total_fragments:,}")
+    print(f"  Case-to-case citations:   {total_case_citations:,}")
+    print(f"  Case-to-legislation citations: {total_legislation_citations:,}")
+    print(
+        f"Database: {initial.get('works', 0)} -> {final.get('works', 0)} works, "
+        f"{initial.get('fragments', 0):,} -> {final.get('fragments', 0):,} fragments"
     )
     return 0
 
@@ -980,6 +1077,15 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("ingest-pdfs", help="Process PDFs already in data/raw/")
     p.add_argument("--raw-dir", default=DEFAULT_RAW_DIR, metavar="DIR")
 
+    # ingest-caselaw
+    p = sub.add_parser("ingest-caselaw", help="Scrape rechtspraak.sr court decisions")
+    p.add_argument("--limit", type=int, default=None, metavar="N",
+                   help="Limit number of decisions to process")
+    p.add_argument("--rate-limit", type=float, default=2.0, metavar="SECONDS")
+    p.add_argument("--force", action="store_true",
+                   help="Re-process decisions already in the store")
+    p.add_argument("--verbose", "-v", action="store_true")
+
     # consolidate
     p = sub.add_parser("consolidate", help="Run amendment consolidation pipeline")
     p.add_argument("--min-confidence", type=float, default=0.55, metavar="F",
@@ -1044,6 +1150,7 @@ def main() -> None:
         "stats":            cmd_stats,
         "ingest":           cmd_ingest,
         "ingest-pdfs":      cmd_ingest_pdfs,
+        "ingest-caselaw":   cmd_ingest_caselaw,
         "consolidate":      cmd_consolidate,
         "link-citations":   cmd_link_citations,
         "index":            cmd_index,
