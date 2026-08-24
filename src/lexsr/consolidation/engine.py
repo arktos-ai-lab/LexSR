@@ -29,6 +29,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Dict, List, Optional, Tuple
 
+from ..core.title_matching import resolve_work_by_title
 from ..core.models import (
     AmendmentLink,
     Citation,
@@ -137,64 +138,14 @@ def _new_fragment_id(base_id: str, suffix: str) -> str:
 # Base law resolver
 # ---------------------------------------------------------------------------
 
-_STOP_WORDS = re.compile(r'\b(?:de|het|van|der|den|een|the)\b', re.I)
-
-
-def _normalize_ref(raw: str) -> str:
-    """Normalize a law reference for fuzzy matching."""
-    s = _STOP_WORDS.sub('', raw).strip()
-    return re.sub(r'\s+', ' ', s.lower())
-
-
 def _resolve_base_work(
     raw_ref: str, store: CanonicalStore
 ) -> Optional[Work]:
-    """
-    Resolve a raw law reference (e.g. "de Arbeidswet 1963") to a Work.
-
-    Strategy (in order):
-    1. Exact title match
-    2. Normalized title (strip stop words)
-    3. Substring: normalized ref ⊆ normalized title
-    4. Year + keyword match
-    """
-    norm_ref = _normalize_ref(raw_ref)
-
-    works = store.list_works(limit=10_000)
-
-    # 1 + 2: exact or normalized title match
-    for work in works:
-        if work.title.strip().lower() == raw_ref.strip().lower():
-            return work
-        if _normalize_ref(work.title) == norm_ref:
-            return work
-
-    # 3: substring — ref is contained in title or title is contained in ref.
-    # A very short normalized string (OCR noise, a stray single letter) is a
-    # substring of almost everything, so require a minimum length before
-    # trusting either direction of the containment check.
-    MIN_SUBSTRING_LEN = 4
-    if len(norm_ref) >= MIN_SUBSTRING_LEN:
-        for work in works:
-            norm_title = _normalize_ref(work.title)
-            if len(norm_title) < MIN_SUBSTRING_LEN:
-                continue
-            if norm_ref in norm_title or norm_title in norm_ref:
-                return work
-
-    # 4: year + at least 2 distinctive words
-    year_m = re.search(r'\b(\d{4})\b', raw_ref)
-    if year_m:
-        year = year_m.group(1)
-        words = [w for w in norm_ref.split() if len(w) > 3]
-        for work in works:
-            if year in work.title:
-                norm_t = _normalize_ref(work.title)
-                if any(w in norm_t for w in words):
-                    return work
-
-    logger.warning("Could not resolve base law: %r", raw_ref)
-    return None
+    """Resolve a raw law reference (e.g. "de Arbeidswet 1963") to a Work."""
+    work = resolve_work_by_title(raw_ref, store.list_works(limit=10_000))
+    if not work:
+        logger.warning("Could not resolve base law: %r", raw_ref)
+    return work
 
 
 # ---------------------------------------------------------------------------
