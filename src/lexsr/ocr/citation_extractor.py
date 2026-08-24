@@ -28,7 +28,8 @@ from datetime import date
 from typing import Dict, List, Optional, Tuple
 
 from ..core.resolver import CitationResolver, ResolvedReference
-from ..core.models import Citation, CitationType, Fragment, TemporalExtent
+from ..core.models import Citation, CitationType, Fragment, TemporalExtent, Work
+from ..core.title_matching import resolve_work_by_title
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,13 @@ class CitationExtractor:
         """
         self.store = store
         self.resolver = CitationResolver(store) if store else None
+        self._works_cache: Optional[List[Work]] = None
+
+    def _cached_works(self) -> List[Work]:
+        """All works, fetched once and reused across many to_citation() calls."""
+        if self._works_cache is None:
+            self._works_cache = self.store.list_works(limit=10_000) if self.store else []
+        return self._works_cache
 
     def extract_from_fragment(
         self,
@@ -201,6 +209,21 @@ class CitationExtractor:
                     if tgt_work:
                         target_work_id = tgt_work.id
 
+            # The resolver's abbreviation registry produces idealized
+            # canonical slugs (e.g. "grondwet-1987") that routinely don't
+            # match the filename-derived work IDs real scraped/OCR'd
+            # documents get. Fall back to fuzzy title matching — the same
+            # approach amendment base-law resolution already relies on —
+            # rather than silently dropping a citation whose law we
+            # actually have, just under a different ID. Restricted to law-
+            # scheme targets: gazette/ECLI references aren't titled Works,
+            # so fuzzy-matching them against work titles would be noise.
+            if not target_work_id and "/law/" in ec.target_uri:
+                law_name = ec.raw_text
+                fallback = resolve_work_by_title(law_name, self._cached_works())
+                if fallback:
+                    target_work_id = fallback.id
+
         # Map string citation_type to enum
         try:
             ctype = CitationType(ec.citation_type)
@@ -280,14 +303,20 @@ class CitationExtractor:
         resolved_ref: ResolvedReference,
     ) -> str:
         """Determine the type of citation based on source and target."""
-        # Simple classification based on URIs
-        if "/ecli/" in resolved_ref.uri:
+        # Case-law fragments use /id/caselaw/... (this codebase's actual
+        # scheme, see ingestion/caselaw_pipeline.py); /ecli/ never appears
+        # here even though it's a recognized URIScheme, since no ECLI-based
+        # case-law source has been wired up.
+        is_case_target = "/ecli/" in resolved_ref.uri or "/caselaw/" in resolved_ref.uri
+        is_case_source = "/ecli/" in source_fragment.uri or "/caselaw/" in source_fragment.uri
+
+        if is_case_target and not is_case_source:
             return "law_to_case"
         elif "/law/" in source_fragment.uri and "/law/" in resolved_ref.uri:
             return "law_to_law"
-        elif "/ecli/" in source_fragment.uri and "/law/" in resolved_ref.uri:
+        elif is_case_source and "/law/" in resolved_ref.uri:
             return "case_to_law"
-        elif "/ecli/" in source_fragment.uri and "/ecli/" in resolved_ref.uri:
+        elif is_case_source and is_case_target:
             return "case_to_case"
         else:
             return "unknown"
