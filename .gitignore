@@ -68,3 +68,13 @@ site/
 *.bin
 *.pth
 *.onnx
+
+# LaTeX build artifacts (keep the .tex source and compiled .pdf)
+*.aux
+*.out
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.bbl
+*.blg
+*.toc

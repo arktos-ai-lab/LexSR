@@ -19,8 +19,9 @@ targeted a deadline that has passed). This checklist tracks `jurix2026_paper_dra
 | Short paper | ≤5 | Fallback if the long draft can't be trimmed to 10pp in time |
 | Poster | ≤2 | System demo only — not a fit given the evaluation content |
 
-**Current draft targets long paper.** It is content-complete but not yet page-count-verified
-in the actual IOS Press layout (Markdown page estimates are not reliable — see below).
+**Current draft targets long paper.** Content-complete and page-count-verified in the actual
+IOS Press LaTeX layout: body is exactly 10 pages, references start on page 11. No margin
+left — see the LaTeX conversion item below before adding any more content.
 
 ---
 
@@ -44,10 +45,16 @@ in the actual IOS Press layout (Markdown page estimates are not reliable — see
 
 - [ ] **Author information**: single-blind — replace `[AUTHOR NAME(S)]` / `[AFFILIATION(S)]`
       placeholders in the draft header with real names/affiliations/emails.
-- [ ] **Convert to IOS Press LaTeX format.** Download `IOS-Book-Article.zip` from the link
-      above, port the Markdown content over, and compile to PDF. The Markdown draft's length
-      is NOT a reliable page-count proxy for the IOS Press two-column-adjacent dense style —
-      compile early to find out if it's actually within 10pp, not close to the deadline.
+      In the LaTeX source: `docs/research/latex/paper/lexsr_jurix2026.tex`, the
+      `\author[A]{...}` / `\address[A]{...}` lines near the top.
+- [x] **Convert to IOS Press LaTeX format.** Done —
+      `docs/research/latex/paper/lexsr_jurix2026.tex`, using the real IOS-Book-Article.cls
+      template (vendored at `docs/research/latex/texsupport.IOS-Book-Article-master/` for
+      reference). Compiles cleanly with `pdflatex` (2 passes, no errors, no undefined
+      references) to `lexsr_jurix2026.pdf`: **11 pages total, body ends on page 10, references
+      start cleanly on page 11** — fits the 10-page (excl. references) long-paper limit with
+      no room to spare. If any more content gets added, something else needs to be trimmed to
+      stay under the limit; re-compile and check the page break after any edit.
 - [ ] **Fix the reference list.** Every citation in `## References` is flagged
       `UNVERIFIED PLACEHOLDER` in the draft itself — carried over from the JURIX 2025 draft
       and never independently checked. Before submission:
