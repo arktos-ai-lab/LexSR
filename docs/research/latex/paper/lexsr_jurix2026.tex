@@ -18,11 +18,11 @@ Consolidating Legislation and Linking Case Law for Suriname}
 
 \markboth{}{2026\hb}
 
-\author[A]{\fnms{[First]} \snm{[Author]}%
-\thanks{Corresponding Author: [Author Name], [contact details].}}
+\author[A]{\fnms{Ernst} \snm{van Gassen}%
+\thanks{Corresponding Author: Ernst van Gassen, E-mail: evg.gassen@gmail.com.}}
 
-\runningauthor{[Author] et al.}
-\address[A]{[Affiliation]}
+\runningauthor{van Gassen}
+\address[A]{Independent researcher}
 
 \begin{abstract}
 Access to consolidated, machine-readable legislation and linked case law is a prerequisite
@@ -115,9 +115,11 @@ its numbered considerations are Fragments --- the case-law analogue of legislati
 \subsection{Legal Knowledge Systems for Consolidation}
 
 Automated consolidation has received sustained attention in the legal knowledge systems
-community. Francesconi \cite{francesconi2012} describes the challenges of cross-referencing and consolidation
-in Italian law. Boella et al. \cite{boella2012} address amendment detection in Italian statutory texts
-using dependency parsing. The \emph{legislation.gov.uk} system \cite{sheridan2010}
+community. Biagioli, Francesconi et al. \cite{francesconi2004} describe the \emph{Norme in
+Rete} project's XML standards and tools for cross-referencing and consolidating Italian
+legislation. Spinosa et al. \cite{spinosa2009} apply NLP-based metadata extraction to detect
+and classify textual amendments (repeal, substitution, integration) for the same
+consolidation task. The \emph{legislation.gov.uk} system \cite{sheridan2010}
 handles consolidation for UK law at scale with a semi-automated editorial workflow. Vitali
 and Zeni \cite{vitali2007} discuss amendment formalisation in Akoma Ntoso. The Dutch
 \emph{wetten.overheid.nl} portal maintains consolidated texts for all Dutch and former-colonial
@@ -132,7 +134,8 @@ Citation network analysis of case law has a long history in AI and Law, from ear
 precedent networks to more recent graph-based approaches to legal information retrieval and
 argumentation mining \cite{benchcapon2012}. Legal knowledge graphs unifying legislation
 and case law have been built for well-resourced jurisdictions with existing structured data
-(e.g., EU law via EUR-Lex, or national systems with machine-readable case-law feeds); we are
+--- e.g., Dhani et al. \cite{dhani2021} construct one from Indian court judgments and statutes
+for case-similarity recommendation --- but these rely on structured source data; we are
 not aware of prior work constructing such a graph from scratch for a jurisdiction whose
 primary source material is unstructured scanned PDFs and an unindexed WordPress-based case
 portal, which is the setting this paper addresses.
@@ -140,12 +143,13 @@ portal, which is the setting this paper addresses.
 \subsection{NLP for Legal Amendment Text}
 
 Information extraction from legal amendment provisions has been studied for several European
-languages. Palmirani et al. \cite{palmirani2011b} describe a framework for detecting and classifying
-modification events in Italian legislative texts. Waltl et al. \cite{waltl2019} apply sequence
-labelling to amendment instruction detection in German law. For Dutch, Hoekstra et al. \cite{hoekstra2007}
-discuss the Metalex/Akoma Ntoso toolchain, and Peters and Winkels \cite{peters2007} address information
-extraction for Dutch legislation, but explicit consolidation parsing for Dutch has received
-limited attention in the JURIX and ICAIL literature. The use of large language models for
+languages. Lesmo, Mazzei, Palmirani et al. \cite{tulsi2013} present TULSI, an NLP system
+combining deep syntactic analysis with a shallow semantic interpreter to extract and classify
+modificatory provisions in Italian legislative texts. For Dutch, Boer et al. \cite{boer2007}
+propose the MetaLex/LKIF XML standards for structuring legislation, and Hoekstra et al.
+\cite{hoekstra2007} extend this with the LKIF Core ontology of basic legal concepts, but
+explicit amendment/consolidation parsing for Dutch has received limited attention in the
+JURIX and ICAIL literature. The use of large language models for
 legal text understanding is well-established \cite{chalkidis2020,koreeda2021}. Our hybrid approach --- regex-first with LLM fallback for low-confidence cases --- is
 motivated by the need for determinism and auditability while retaining flexibility for novel
 constructions.
@@ -153,8 +157,9 @@ constructions.
 \subsection{Legal Corpora for Small Jurisdictions}
 
 The JURIX and ICAIL communities have increasingly highlighted the need for legal NLP
-resources beyond the major European languages \cite{niklaus2021}. Lippincott et al.
-\cite{lippincott2019} discuss challenges of legal NLP in low-resource settings. To our knowledge, no
+resources beyond the major European languages \cite{niklaus2024}. Krasadakis et al.
+\cite{krasadakis2024} survey the specific challenges legal informatics poses for
+low-resource-language NLP. To our knowledge, no
 machine-readable structured corpus linking legislation and case law for Suriname has
 previously been published.
 
@@ -535,27 +540,29 @@ jurisdictions.
 IFLA Study Group. Functional Requirements for Bibliographic Records. IFLA Publications; 1998.
 
 \bibitem{palmirani2011a}
-Palmirani M, Vitali F. Akoma-Ntoso for European legal sources. In: Proceedings of the
-Legislative XML for the Semantic Web Workshop (LKSG); 2011.
+Palmirani M, Vitali F. Akoma-Ntoso for Legal Documents. In: Sartor G, et al., editors.
+Legislative XML for the Semantic Web. Springer; 2011. p. 75-100.
 
 \bibitem{pubsoffice2012}
 Publications Office of the European Union. European Legislation Identifier (ELI). Official
 Journal 2012/C 325/02; 2012.
 
-\bibitem{francesconi2012}
-Francesconi E. Towards automatic management of the legislative process. European Journal of
-Law and Technology. 2012;3(1).
+\bibitem{francesconi2004}
+Biagioli C, Francesconi E, Spinosa P, Taddei M. XML Documents Within a Legal Domain:
+Standards and Tools for the Italian Legislative Environment. In: Document Analysis Systems
+VI (DAS 2004). Lecture Notes in Computer Science, vol 3163. Springer; 2004.
 
-\bibitem{boella2012}
-Boella G, et al. Detecting semantic change in legal documents. In: Proceedings of JURIX 2012.
-IOS Press; 2012.
+\bibitem{spinosa2009}
+Spinosa P, Giardiello G, Cherubini M, Marchi S, Venturi G, Montemagni S. NLP-based metadata
+extraction for legal text consolidation. In: Proceedings of the 12th International Conference
+on Artificial Intelligence and Law (ICAIL 2009); 2009. p. 40-49.
 
 \bibitem{sheridan2010}
 Sheridan J, Tennison J. Linking UK government data. In: Proceedings of LDOW 2010; 2010.
 
 \bibitem{vitali2007}
-Vitali F, Zeni F. Towards a country-independent data format for parliamentary documents. In:
-Proceedings of the LEGLIN Workshop; 2007.
+Vitali F, Zeni F. Towards a country-independent data format: the Akoma Ntoso experience. In:
+Proceedings of the V Legislative XML Workshop. Florence; 2007.
 
 \bibitem{koop2022}
 KOOP. Offici\"{e}le bekendmakingen --- wetten.overheid.nl. Kennis- en exploitatiecentrum voor
@@ -565,21 +572,21 @@ offici\"{e}le overheidspublicaties; 2022.
 Bench-Capon T, et al. A history of AI and Law in 50 papers. Artificial Intelligence and Law.
 2012;20(3):215-319.
 
-\bibitem{palmirani2011b}
-Palmirani M, et al. Detecting and modelling legal modification events. In: Proceedings of
-JURIX 2011. IOS Press; 2011.
+\bibitem{dhani2021}
+Dhani JS, Bhatt R, Ganesan B, Sirohi P, Bhatnagar V. Similar Cases Recommendation using Legal
+Knowledge Graphs. arXiv:2107.04771; 2021.
 
-\bibitem{waltl2019}
-Waltl B, et al. Automated extraction and classification of legal modifications. In:
-Proceedings of JURIX 2019. IOS Press; 2019.
+\bibitem{tulsi2013}
+Lesmo L, Mazzei A, Palmirani M, Radicioni DP. TULSI: an NLP system for extracting legal
+modificatory provisions. Artificial Intelligence and Law. 2013;21:139-172.
+
+\bibitem{boer2007}
+Boer A, Winkels R, Vitali F. Proposed XML standards for law: MetaLex and LKIF. In:
+Proceedings of JURIX 2007. IOS Press; 2007.
 
 \bibitem{hoekstra2007}
-Hoekstra R, et al. The LKIF core ontology of basic legal concepts. In: Proceedings of the
-LOAIT Workshop; 2007.
-
-\bibitem{peters2007}
-Peters W, Winkels R. Ontology-based legal information retrieval. In: Proceedings of
-JURIX 2007. IOS Press; 2007.
+Hoekstra R, Breuker J, Di Bello M, Boer A. The LKIF core ontology of basic legal concepts. In:
+Proceedings of the LOAIT Workshop. CEUR Workshop Proceedings, vol 321; 2007. p. 43-63.
 
 \bibitem{chalkidis2020}
 Chalkidis I, et al. LEGAL-BERT: The muppets straight out of law school. In: Findings of
@@ -589,13 +596,14 @@ EMNLP 2020; 2020.
 Koreeda Y, Manning C. ContractNLI: A dataset for document-level natural language inference
 for contracts. In: Findings of EMNLP 2021; 2021.
 
-\bibitem{niklaus2021}
-Niklaus J, et al. MultiLexSum: A multilingual dataset for summarization of legal texts. In:
-Proceedings of ACL 2021; 2021.
+\bibitem{niklaus2024}
+Niklaus J, et al. MultiLegalPile: A 689GB Multilingual Legal Corpus. In: Proceedings of ACL
+2024 (Volume 1: Long Papers); 2024.
 
-\bibitem{lippincott2019}
-Lippincott T, et al. Legal NLP for low-resource jurisdictions. In: Proceedings of ICAIL 2019;
-2019.
+\bibitem{krasadakis2024}
+Krasadakis P, Sakkopoulos E, Verykios VS. A Survey on Challenges and Advances in Natural
+Language Processing with a Focus on Legal Informatics and Low-Resource Languages.
+Electronics. 2024;13(3):648.
 
 \end{thebibliography}
 \end{document}

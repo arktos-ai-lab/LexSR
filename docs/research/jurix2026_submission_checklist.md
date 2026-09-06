@@ -1,10 +1,15 @@
-# JURIX 2026 Submission Checklist
+# JURIX 2026 Submission Checklist (superseded — see note)
 
-**Conference**: JURIX 2026, 39th International Conference on Legal Knowledge and Information Systems, Toulouse, December 8–10, 2026
-**Deadlines**: Abstract (recommended, not mandatory) August 28, 2026 — Full paper September 5, 2026 (AoE)
-**CFP**: https://www.irit.fr/jurix2026/call-for-papers/
+**JURIX 2026's full-paper deadline (Sept 5, 2026 AoE) was missed** — this checklist's original
+target. Retargeting to the *Artificial Intelligence and Law* journal (Springer, rolling
+submission, no deadline) as the primary next venue; JURIX 2027 and ICAIL 2027 are possible
+conference alternatives once their CFPs post (neither had one as of 2026-09-06). The content
+below is kept because the underlying work items were real and mostly still apply — only the
+venue and its deadline have changed.
+
 **Format**: IOS Press FAIA — template at https://www.iospress.com/book-article-instructions
-**Review**: Single-blind (real author names/affiliations required in the submission)
+(also compatible with AI & Law journal submission)
+**Review**: Real author names/affiliations required (not double-blind)
 
 Supersedes `jurix2025_submission_checklist.md` (JURIX 2025 already took place; that draft
 targeted a deadline that has passed). This checklist tracks `jurix2026_paper_draft.md`.
@@ -43,10 +48,9 @@ left — see the LaTeX conversion item below before adding any more content.
 
 ## What Still Needs to Be Done — Must-Have
 
-- [ ] **Author information**: single-blind — replace `[AUTHOR NAME(S)]` / `[AFFILIATION(S)]`
-      placeholders in the draft header with real names/affiliations/emails.
-      In the LaTeX source: `docs/research/latex/paper/lexsr_jurix2026.tex`, the
-      `\author[A]{...}` / `\address[A]{...}` lines near the top.
+- [x] **Author information** — filled in 2026-09-06: Ernst van Gassen, Independent researcher,
+      evg.gassen@gmail.com. `\author[A]{...}` / `\address[A]{...}` in
+      `docs/research/latex/paper/lexsr_jurix2026.tex`.
 - [x] **Convert to IOS Press LaTeX format.** Done —
       `docs/research/latex/paper/lexsr_jurix2026.tex`, using the real IOS-Book-Article.cls
       template (vendored at `docs/research/latex/texsupport.IOS-Book-Article-master/` for
@@ -55,20 +59,30 @@ left — see the LaTeX conversion item below before adding any more content.
       start cleanly on page 11** — fits the 10-page (excl. references) long-paper limit with
       no room to spare. If any more content gets added, something else needs to be trimmed to
       stay under the limit; re-compile and check the page break after any edit.
-- [ ] **Fix the reference list.** Every citation in `## References` is flagged
-      `UNVERIFIED PLACEHOLDER` in the draft itself — carried over from the JURIX 2025 draft
-      and never independently checked. Before submission:
-  - Verify every entry's title/venue/year/pages against the actual publication
-  - Add real citations for Section 2.3 (Legal Knowledge Graphs and Citation Networks) —
-    currently only cites Bench-Capon et al. 2012 generically; needs specific KG/citation-
-    network papers from JURIX/ICAIL/AI&Law
-  - Format per IOS Press bibliography style
-- [ ] **Re-verify all corpus numbers immediately before submission.** Run
-      `python -m lexsr stats`, `python -m lexsr benchmark`, and `python -m lexsr build-graph`
-      fresh and confirm Table values in Sections 3.3, 6.1–6.4 still match — the corpus is
-      still being actively grown (case-law ingestion has only covered 300 of 900+ available
-      decisions; the 6 broken scrapers may get fixed) and stale numbers in a submitted paper
-      are a correctness problem, not just a formatting one.
+- [x] **Fixed the reference list — 2026-09-06.** All 16 citations checked individually against
+      real publisher records (Springer, ACL Anthology, IOS Press, DBLP, Semantic Scholar).
+      **6 of 16 were confirmed fabricated or wrong-attribution** (Boella et al. 2012 "Detecting
+      semantic change," Palmirani et al. 2011 "Detecting and modelling legal modification
+      events," Peters & Winkels 2007 "Ontology-based legal information retrieval," Waltl et al.
+      2019, Lippincott et al. 2019, Francesconi 2012's exact title/venue, and Niklaus et al.
+      2021's "MultiLexSum" — real paper, wrong authors/venue/year) — replaced with real papers
+      supporting the same claims (Spinosa et al. 2009, Lesmo/Mazzei/Palmirani et al. 2013
+      TULSI, Boer/Winkels/Vitali 2007, Krasadakis et al. 2024, Biagioli/Francesconi et al.
+      2004, Niklaus et al. 2024 MultiLegalPile). 2 more (Palmirani & Vitali 2011, Vitali &
+      Zeni 2007) had garbled titles/venues corrected. Section 2.3's KG-citation gap closed
+      with Dhani et al. 2021. Every rewritten in-text sentence now accurately describes what
+      its real citation actually found — this was not just a bibliography-formatting pass;
+      several fabricated citations also carried fabricated content claims in the prose. One
+      more independent pass before submission is still recommended, but this is no longer
+      placeholder-grade. See `jurix2026_paper_draft.md`'s References section for the full
+      before/after record.
+- [x] **Corpus numbers re-verified fresh — 2026-09-06.** Ran `python -m lexsr stats`,
+      `benchmark`, and `build-graph`, plus a direct DB query matching the paper's own
+      methodology for the 17.1% figure. Every headline number in the paper matched exactly:
+      1,623 works, 45,293 fragments, 15,867 citations, 2,713/15,867 (17.1%) resolved, 100%
+      benchmark P/R/F1 with 91.2% raw resolution, 2,768 KG edges. Nothing had drifted despite
+      the corpus still actively growing. Re-run this same check again immediately before
+      whatever submission actually happens, since more time will have passed.
 
 ## Strongly Recommended, Time Permitting
 
