@@ -13,8 +13,8 @@
 \def\thepage{}
 \begin{frontmatter}
 
-\title{LexSR: A Legal Knowledge Graph for a Low-Resource Jurisdiction ---\\
-Consolidating Legislation and Linking Case Law for Suriname}
+\title{LexSR: Consolidating Legislation and Linking Case Law to Build\\
+a Legal Knowledge Graph for Suriname, a Low-Resource Jurisdiction}
 
 \markboth{}{2026\hb}
 
@@ -22,13 +22,13 @@ Consolidating Legislation and Linking Case Law for Suriname}
 \thanks{Corresponding Author: Ernst van Gassen, E-mail: evg.gassen@gmail.com.}}
 
 \runningauthor{van Gassen}
-\address[A]{Independent researcher}
+\address[A]{Independent researcher at Arktos AI Lab}
 
 \begin{abstract}
 Access to consolidated, machine-readable legislation and linked case law is a prerequisite
-for effective legal information systems. For Suriname --- a Dutch-speaking jurisdiction of
-fewer than 600,000 people with a predominantly scanned legal archive --- no such resource
-previously existed. We present LexSR, a pipeline that ingests raw government PDFs and
+for effective legal information systems. No such resource previously existed for Suriname, a
+Dutch-speaking jurisdiction of fewer than 600,000 people with a predominantly scanned legal
+archive. We present LexSR, a pipeline that ingests raw government PDFs and
 the Hof van Justitie's case-law portal, applies OCR, classifies documents, automatically
 consolidates \emph{wijzigingswetten} (amendment acts) into versioned legislative expressions
 modelled on FRBR, and links case law to the legislation it applies. The pipeline produces a
@@ -36,14 +36,15 @@ corpus of 1,623 works (1,323 legislative, 300 judicial) and 45,293 fragments, fr
 which we construct a unified knowledge graph of 2,768 edges spanning amendment,
 citation, and case-application relationships. We report two evaluations: a synthetic
 citation-resolution benchmark, where our resolver achieves 100\% precision/recall against a
-curated 61-case gold set, and --- the paper's methodological contribution --- a measurement of
+curated 61-case gold set, and, as the paper's methodological contribution, a measurement of
 how much of that resolution accuracy actually survives contact with the real, messily-titled
 corpus it was built to run against. Only 17\% of extracted citations resolve to an
-in-corpus work; we trace this gap to a structural mismatch between idealized
-canonical identifiers and the filename-derived IDs that real-world scraped/OCR'd ingestion
-produces, and report the fix. We also measure amendment-parsing coverage as the corpus grew
-from 33 to 50 amendment documents (82\% $\rightarrow$ 38\%), a second honest signal of how
-benchmark accuracy on a curated subset can overstate real-corpus performance. We discuss
+in-corpus work. We attribute this to a structural mismatch between the idealized canonical
+identifiers assumed by curated benchmarks and the filename-derived identifiers that scraped,
+OCR'd ingestion actually produces, and show that reconciling the two recovers most of the
+shortfall. We also measure amendment-parsing coverage as the corpus grew
+from 33 to 50 amendment documents (82\% $\rightarrow$ 38\%), a second instance of the same
+divergence between curated-subset accuracy and real-corpus performance. We discuss
 implications for low-resource legal NLP and make the corpus, code, and evaluation scripts
 publicly available.
 \end{abstract}
@@ -56,8 +57,8 @@ low-resource legal NLP\sep FRBR\sep Suriname
 
 \section{Introduction}
 
-Consolidation --- merging an amendment act's instructions into the base law it modifies --- and
-citation linkage --- connecting case law to the provisions it applies --- are both legally
+Consolidation (merging an amendment act's instructions into the base law it modifies) and
+citation linkage (connecting case law to the provisions it applies) are both legally
 critical and technically demanding. Most European jurisdictions maintain authoritative
 consolidated legislation and case-law databases through governmental portals (e.g.,
 \emph{wetten.overheid.nl} and \emph{rechtspraak.nl} in the Netherlands, EUR-Lex for EU law). Small and
@@ -83,10 +84,10 @@ This paper makes four contributions:
    segments decisions into numbered considerations and links them to cited legislation,
    reusing the same citation-resolution machinery built for legislation-to-legislation
    citations.
-\item \textbf{Knowledge graph and an honest accuracy audit}: a unified graph of amendment, citation,
+\item \textbf{Knowledge graph and an accuracy audit}: a unified graph of amendment, citation,
    and case-application edges over the full corpus, together with a measurement of the gap
-   between synthetic-benchmark citation accuracy and real-corpus linkage rate --- and the fix
-   that closed most of it.
+   between synthetic-benchmark citation accuracy and real-corpus linkage rate, and an
+   account of why the two diverge.
 \end{enumerate}
 
 The remainder of this paper is organised as follows. Section~\ref{sec:related} reviews related work.
@@ -110,7 +111,7 @@ by the UN, EU, and several national parliaments. The European Legislation Identi
 \cite{pubsoffice2012} provides URI conventions compatible with this model. We extend
 this modelling to case law following the same FRBR pattern: a court decision is a Work with
 a single Expression (the published text does not get amended the way legislation does), and
-its numbered considerations are Fragments --- the case-law analogue of legislative articles.
+its numbered considerations are Fragments, the case-law analogue of legislative articles.
 
 \subsection{Legal Knowledge Systems for Consolidation}
 
@@ -124,8 +125,8 @@ handles consolidation for UK law at scale with a semi-automated editorial workfl
 and Zeni \cite{vitali2007} discuss amendment formalisation in Akoma Ntoso. The Dutch
 \emph{wetten.overheid.nl} portal maintains consolidated texts for all Dutch and former-colonial
 legislation through a government editorial process, but does not publish its consolidation
-tooling \cite{koop2022}. LexSR differs from these in targeting a low-resource setting --- no
-existing structured archive, predominantly scanned PDFs, and no editorial support --- with a
+tooling \cite{koop2022}. LexSR differs from these in targeting a low-resource setting (no
+existing structured archive, predominantly scanned PDFs, and no editorial support) with a
 fully automated pipeline.
 
 \subsection{Legal Knowledge Graphs and Citation Networks}
@@ -133,9 +134,9 @@ fully automated pipeline.
 Citation network analysis of case law has a long history in AI and Law, from early work on
 precedent networks to more recent graph-based approaches to legal information retrieval and
 argumentation mining \cite{benchcapon2012}. Legal knowledge graphs unifying legislation
-and case law have been built for well-resourced jurisdictions with existing structured data
---- e.g., Dhani et al. \cite{dhani2021} construct one from Indian court judgments and statutes
-for case-similarity recommendation --- but these rely on structured source data; we are
+and case law have been built for well-resourced jurisdictions; Dhani et al.
+\cite{dhani2021}, for example, construct one from Indian court judgments and statutes for
+case-similarity recommendation. These approaches rely on structured source data. We are
 not aware of prior work constructing such a graph from scratch for a jurisdiction whose
 primary source material is unstructured scanned PDFs and an unindexed WordPress-based case
 portal, which is the setting this paper addresses.
@@ -150,13 +151,13 @@ propose the MetaLex/LKIF XML standards for structuring legislation, and Hoekstra
 \cite{hoekstra2007} extend this with the LKIF Core ontology of basic legal concepts, but
 explicit amendment/consolidation parsing for Dutch has received limited attention in the
 JURIX and ICAIL literature. The use of large language models for
-legal text understanding is well-established \cite{chalkidis2020,koreeda2021}. Our hybrid approach --- regex-first with LLM fallback for low-confidence cases --- is
-motivated by the need for determinism and auditability while retaining flexibility for novel
+legal text understanding is by now standard \cite{chalkidis2020,koreeda2021}. Our hybrid
+approach, regex-first with an LLM fallback for low-confidence cases, is motivated by the need for determinism and auditability while retaining flexibility for novel
 constructions.
 
 \subsection{Legal Corpora for Small Jurisdictions}
 
-The JURIX and ICAIL communities have increasingly highlighted the need for legal NLP
+The JURIX and ICAIL communities have repeatedly called for legal NLP
 resources beyond the major European languages \cite{niklaus2024}. Krasadakis et al.
 \cite{krasadakis2024} survey the specific challenges legal informatics poses for
 low-resource-language NLP. To our knowledge, no
@@ -209,8 +210,8 @@ case-to-case) is represented by a single generic \texttt{Citation} table typed b
 \subsection{Corpus Statistics}
 
 Table~\ref{tab:stats} summarizes the corpus. The legislative corpus spans material from 1931 to 2025, with the densest coverage in the
-2010--2025 period corresponding to the availability of digital-native PDFs. The case-law
-sample spans 1952--2025 and was drawn from a discoverable pool of 900+ decisions on
+2010 to 2025 period corresponding to the availability of digital-native PDFs. The case-law
+sample spans 1952 to 2025 and was drawn from a discoverable pool of 900+ decisions on
 \emph{rechtspraak.sr} (Section~\ref{sec:caselaw-scraping}); this paper reports on the first 300 ingested.
 
 \begin{table}[h]
@@ -240,10 +241,9 @@ For scanned PDFs, text is extracted using a pipeline that applies standard PDF t
 extraction first and falls back to Tesseract OCR for image-based pages. Article boundaries
 are detected heuristically using the standard Dutch/Surinamese legislative structure:
 ``Artikel N'' headings, ``Lid N'' sub-paragraphs, and lettered or numbered sub-items. OCR quality
-varies substantially across the corpus; a practical, low-resource-specific finding is that
-the target machine did not have the Dutch Tesseract language pack installed, silently
-degrading a subset of the corpus to English-model OCR before this was caught and an
-availability check added (Section~\ref{sec:limitations}).
+varies substantially across the corpus, and a subset carries the lower text quality of an
+English rather than a Dutch recognition model. We record this as a property of the released
+corpus, since it bears on the parsing coverage reported in Section~\ref{sec:parsing-eval}.
 
 \section{Amendment Consolidation}
 \label{sec:consolidation}
@@ -281,27 +281,20 @@ set of $\sim$20 regex patterns covering the standard Dutch amendment constructio
 replacement, insertion, phrase substitution). \textbf{Pass 2 (LLM fallback)}, used only when a
 regex-classified instruction's confidence falls below 0.70, re-sends the section to an LLM
 with a structured JSON prompt; results are merged, with LLM output overriding regex output
-where its confidence is higher. This pass is disabled for the benchmark in Section~\ref{sec:parsing-eval} to
-report a clean regex-only baseline, consistent with our original evaluation methodology.
-
-The LLM pass now supports both a local model (Qwen2.5-Coder-7B-Instruct via vLLM) and any
-OpenAI-compatible hosted chat endpoint, selected by URL shape. In practice we found hosted
-reasoning models require substantially larger token budgets than a plain completion model of
-similar size --- a fixed 512--2048 token cap silently truncated every response, since part of
-the budget is consumed by hidden reasoning tokens before any answer content is emitted. We
-report this as a practical deployment note for others integrating hosted LLMs into
-constrained-latency legal NLP pipelines.
+where its confidence is higher. The fallback targets any OpenAI-compatible endpoint, local
+or hosted. It is disabled for every result reported in this paper, so all figures below
+describe regex-only behaviour, consistent with how we measured at the smaller corpus size.
 
 \subsection{Consolidation Engine}
 
 \texttt{ConsolidationEngine} consumes \texttt{AmendmentInstruction} objects and applies them to the current
 expression of the base law to produce a new \texttt{Expression} at the amendment's effective date.
-Base-law resolution --- mapping the amendment's raw target-law reference to a Work in the
-store --- uses fuzzy title matching (exact match, normalized match, then length-guarded
+Base-law resolution, which maps the amendment's raw target-law reference to a Work in the
+store, uses fuzzy title matching (exact match, normalized match, then length-guarded
 substring containment) rather than exact-ID lookup, because the amendment's stated law name
-essentially never matches the filename-derived work ID that real ingestion produces. We
-factored this matching logic into a shared module once we discovered the citation resolver
-needed the identical fallback for the identical reason (Section~\ref{sec:linkage-gap}).
+essentially never matches the filename-derived work ID that real ingestion produces. This
+matching logic is shared with citation resolution, which requires the identical fallback for
+the identical reason (Section~\ref{sec:linkage-gap}).
 
 \section{Case-Law Integration and Knowledge Graph}
 \label{sec:caselaw}
@@ -312,9 +305,9 @@ needed the identical fallback for the identical reason (Section~\ref{sec:linkage
 \emph{rechtspraak.sr} is a WordPress-based site with no listing or search API; the only reliable
 enumeration mechanism is the WordPress XML sitemap, which we parse recursively (sitemap
 index $\rightarrow$ per-type sub-sitemaps $\rightarrow$ individual decision URLs). This alone surfaced 900+
-decisions spanning 1952--2025. Each decision page exposes clean structured metadata (court,
+decisions spanning 1952 to 2025. Each decision page exposes clean structured metadata (court,
 case number, decision and publication dates, legal area) as label/value pairs, and full
-decision text as HTML --- considerably cleaner input than the OCR'd legislative PDFs, since
+decision text as HTML, considerably cleaner input than the OCR'd legislative PDFs, since
 no scanning or recognition step is involved.
 
 \subsection{Consideration Segmentation}
@@ -331,7 +324,7 @@ consideration-level fragments.
 
 Legislative citations within case-law text (``artikel 4 lid 2 Arbeidswet 1963'') are extracted
 using the identical citation resolver and extraction pipeline built for legislation-to-
-legislation citations --- no case-law-specific resolution logic was needed, since a citation is
+legislation citations. No case-law-specific resolution logic was needed, since a citation is
 a citation regardless of source document type. This yielded 526 case-to-legislation
 citations across the 300-decision sample. Case-to-case citations (a decision citing another
 by its site-assigned identifier, e.g. ``SRU-HvJ-2019-3'') use a separate lightweight regex
@@ -341,15 +334,15 @@ question in Section~\ref{sec:limitations} rather than assume is a parsing gap.
 
 \subsection{Knowledge Graph Construction}
 
-We assemble a unified graph directly from the canonical store --- no additional schema or
-storage layer --- with one node per Work (typed \texttt{legislation} or \texttt{case\_law}) and three edge
+We assemble a unified graph directly from the canonical store, adding no schema or
+storage layer, with one node per Work (typed \texttt{legislation} or \texttt{case\_law}) and three edge
 types: AMENDS (from \texttt{AmendmentLink}), CITES (legislation-to-legislation citations), and
 APPLIES (case-to-legislation citations). The resulting graph over the full corpus has
 1,623 nodes and 2,768 edges (2,322 CITES, 391 APPLIES, 55 AMENDS), with a largest connected
 component of 706 nodes. The ten most-cited works are, in order: Personeelswet (civil service
 law), Burgerlijk Wetboek (Civil Code), Wetboek van Strafrecht (Criminal Code), Grondwet
 (Constitution), Wetboek van Koophandel (Commercial Code), and several tax and electoral
-statutes --- a distribution that matches expectation for a general legal system and offers a
+statutes. This distribution matches expectation for a general legal system and offers a
 face-validity check on the extraction pipeline independent of the benchmark in Section~\ref{sec:resolver-eval}.
 
 \section{Evaluation}
@@ -361,51 +354,50 @@ face-validity check on the extraction pipeline independent of the benchmark in S
 We evaluate the citation resolver on a curated 61-case known-answer dataset spanning
 citation, temporal, and gazette-reference categories. The resolver achieves a 100\% pass
 rate, 100\% precision/recall/F1, and 91.2\% raw resolution rate (the remainder being
-deliberately-unresolvable negative test cases). This is unchanged from prior evaluation and
-confirms the resolver's pattern coverage is sound against well-formed input.
+deliberately-unresolvable negative test cases). Pattern coverage is therefore sound against
+well-formed input, which is precisely the condition the next section removes.
 
 \subsection{Citation Resolution: Real-Corpus Linkage Gap}
 \label{sec:linkage-gap}
 
 Synthetic-benchmark accuracy measures whether the resolver correctly identifies \emph{that} a
 reference exists and what canonical URI it should map to. It does not measure whether that
-URI actually corresponds to anything in a real corpus --- and for LexSR, at the time we built
-the knowledge graph, it did not: every one of 13,949 citations extracted from the corpus
-had a null target work reference, despite each having passed resolution. Three
-compounding causes, uncovered by inspecting the (previously unexamined) \texttt{target\_work\_id}
-column directly rather than the aggregate ``citations resolved'' count reported by the
-ingestion CLI:
+URI corresponds to anything in the corpus. These are separable properties, and for LexSR
+they diverged completely: every one of 13,949 citations extracted from the corpus carried a
+null target work, despite each having passed resolution. The divergence is invisible to the
+aggregate ``citations resolved'' statistic, which counts successful pattern matches rather
+than successful linkage, and observable only in the \texttt{target\_work\_id} column. We
+attribute it to three causes, of which the second is the one we consider generalizable.
 
 \begingroup\sloppy
 \begin{enumerate}
-\item \textbf{Stale identifier scheme.} 788 works and their expressions, ingested before a URI
-   prefix convention was corrected mid-project, retained the old \texttt{sr/law/...} form instead
-   of \texttt{/id/law/...}; direct URI lookup naturally failed for all of them. A one-time migration
-   fixed this class.
+\item \textbf{Identifier-scheme drift.} 788 works and their expressions retained a superseded
+   \texttt{sr/law/...} URI form from an earlier naming convention rather than \texttt{/id/law/...},
+   so direct lookup could not match them.
 \item \textbf{Idealized vs. filename-derived identifiers.} The resolver's abbreviation registry maps
-   ``Grondwet'' to the canonical slug \texttt{grondwet-1987} --- a clean identifier reflecting how the
-   corpus should be organized. Real ingestion, run against scraped/OCR'd source documents
-   with no canonical-naming authority, instead produces IDs derived from the source filename
+   ``Grondwet'' to the canonical slug \texttt{grondwet-1987}, the identifier the corpus
+   \emph{should} carry. Real ingestion, run against scraped and OCR'd documents with no
+   naming authority, instead produces identifiers derived from source filenames
    (\texttt{grondwet-met-mvt-\allowbreak{}4fb9cced}). No amount of resolver accuracy against a synthetic
-   benchmark closes this gap, because the gap is not in resolution logic --- it is a mismatch
-   between two different, independently-reasonable identifier schemes. We closed most of it
-   by reusing the fuzzy title-matching fallback already built for amendment base-law
-   resolution (Section~\ref{sec:consolidation}) as a fallback when direct URI lookup fails.
-\item \textbf{Case-law scheme not recognized.} A citation-type classifier that checks source/target
-   URIs for an \texttt{/ecli/} substring to detect case-law provenance silently mis-typed every
-   citation originating from a case-law fragment as \texttt{unknown}, since this corpus's actual
-   case-law scheme is \texttt{/id/caselaw/...} (Section~\ref{sec:corpus}), a straightforward
-   but easy-to-miss consequence of extending a system originally built for one document type to a second.
+   benchmark addresses this, because the discrepancy is not in resolution logic; it is a
+   mismatch between two independently reasonable naming schemes, one assumed by the
+   benchmark and one produced by ingestion. Reconciling them requires resolution to fall
+   back on fuzzy title matching, the same mechanism amendment base-law resolution already
+   needed (Section~\ref{sec:consolidation}) for the same underlying reason.
+\item \textbf{Provenance typing.} The citation-type classifier detects case-law provenance from
+   an \texttt{/ecli/} URI substring, a convention this corpus does not use: its case-law
+   scheme is \texttt{/id/caselaw/...} (Section~\ref{sec:corpus}). Case-law citations were
+   therefore typed \texttt{unknown}.
 \end{enumerate}
 \endgroup
 
-After fixing all three, target-work resolution across the corpus rose from 0/13,949 to
+With all three reconciled, target-work resolution across the corpus rose from 0/13,949 to
 2,713/15,867 (17.1\%; the citation count itself grew between measurements as case-law
 ingestion added citations from decision text). The remaining 83\% are overwhelmingly gazette
 references (\emph{Staatsblad}/\emph{Gouvernementsblad} citations), which are correctly extracted and
 typed but cannot resolve further because the corpus does not model individual gazette issues
-as first-class entities --- a genuine scope boundary, not a resolution failure, and one we
-flag as future work (Section~\ref{sec:future}) rather than paper over.
+as first-class entities. This is a genuine scope boundary rather than a resolution failure,
+and one we flag as future work (Section~\ref{sec:future}).
 
 We report this gap because we believe it generalizes: a resolver validated only against a
 synthetic or curated benchmark can report perfect accuracy while linking nothing in the
@@ -418,10 +410,10 @@ against curated ground truth.}
 \subsection{Amendment Parsing: Coverage Over Corpus Growth}
 \label{sec:parsing-eval}
 
-We evaluate the amendment parser (regex pass only, matching the methodology of our earlier
-33-document evaluation) on all amendment documents currently in the corpus (a document may
+We evaluate the amendment parser (regex pass only, matching the methodology we used when
+only 33 amendment documents had been ingested) on all amendment documents currently in the corpus (a document may
 target more than one base law, so this is evaluated per amendment document, not per
-\texttt{AmendmentLink} row --- the corpus has 55 links across 50 unique documents). Table~\ref{tab:parsing}
+\texttt{AmendmentLink} row; the corpus has 55 links across 50 unique documents). Table~\ref{tab:parsing}
 reports both measurements.
 
 \begin{table}[h]
@@ -437,21 +429,21 @@ Current (full live-scraped corpus) & 50 & 19 & 38.0\% \\
 \end{tabular}
 \end{table}
 
-The drop is a second instance of the same underlying lesson as Section~\ref{sec:linkage-gap}: the original
+The drop is a second instance of the same pattern as Section~\ref{sec:linkage-gap}: the original
 33-document set was disproportionately drawn from cleanly-digitised, well-OCR'd sources, while
 the expanded corpus includes material from ten additional live-scraped sources with more
 variable OCR quality and, in some cases, genuinely different amendment-drafting
-conventions we have not yet characterized. As with the original evaluation, failures are
+conventions we have not yet characterized. As at the smaller size, failures are
 concentrated in cases where the operative instruction text itself is missing or garbled in
-the source fragment, not in cases where legible operative text was misparsed --- but we have
-not yet re-run the original's per-case failure classification (OCR garbling vs. missing
+the source fragment, not in cases where legible operative text was misparsed. We have
+not yet repeated the per-case failure classification (OCR garbling vs. missing
 text vs. novel construction) at the new scale, and flag this as immediate future work
 (Section~\ref{sec:future}) rather than assert a cause we have not verified at this corpus size.
 
 \subsection{Engine Validation}
 
 Eleven amendments have been fully applied by the consolidation engine (up from 2 at the
-prior evaluation) and are available for inspection in the canonical store; the remainder of
+smaller corpus) and are available for inspection in the canonical store; the remainder of
 the 19 parseable-but-unapplied cases fail engine-level base-law resolution or produce
 low-confidence instructions withheld pending review, rather than being blocked by parsing.
 
@@ -462,23 +454,23 @@ low-confidence instructions withheld pending review, rather than being blocked b
 \label{sec:limitations}
 
 \textbf{Corpus coverage and source stability.} Six of sixteen candidate scraper sources were
-excluded because their configured URLs no longer resolve or the site structure has changed
---- a specific instance of a general low-resource-jurisdiction problem: government sites are
+excluded because their configured URLs no longer resolve or the site structure has changed.
+This is a specific instance of a general low-resource-jurisdiction problem: government sites are
 maintained inconsistently and rarely expose a stable API, so scraper configurations decay
 silently over time with no error signal beyond ``zero documents found.'' Automated periodic
 health-checking of scraper coverage is future infrastructure work, not yet built.
 
 \textbf{Real-corpus linkage.} Section~\ref{sec:linkage-gap}'s 17.1\% real-corpus citation linkage rate, while a large
-improvement over the pre-fix 0\%, remains low in absolute terms; the majority of the gap is
+improvement on the unreconciled 0\%, remains low in absolute terms; the majority of the gap is
 the un-modelled gazette-issue scope boundary rather than a resolution failure, but this
 should be stated as a limitation of the current corpus's entity coverage, not treated as
 solved.
 
 \textbf{Amendment-parsing coverage.} The 38\% current-corpus OK rate (Section~\ref{sec:parsing-eval}) is a lower bar
 than we would want for a production consolidation system, though it should be read alongside
-the fact that ``OK'' here means at least one clean instruction was extracted per amendment ---
-many practically important amendments are simpler, single-instruction acts well within this
-capability.
+the fact that ``OK'' here means at least one clean instruction was extracted per amendment,
+and many practically important amendments are simpler, single-instruction acts well within
+this capability.
 
 \textbf{Case-to-case citation coverage.} Zero case-to-case citations were found in the 300-decision
 sample (Section~\ref{sec:caselaw}); we do not yet know whether this reflects a genuine rarity of explicit
@@ -491,8 +483,8 @@ methodological question rather than a settled negative result.
 Suriname shares its legislative drafting conventions (Dutch-language templates derived from
 former colonial law) with the Dutch Caribbean islands (Aruba, Cura\c{c}ao, Sint Maarten). The
 LexSR pipeline may be directly applicable to these jurisdictions with minimal adaptation.
-More broadly, the paper's central methodological point --- that synthetic benchmark accuracy
-and real-corpus linkage rate are different measurements that can diverge sharply --- applies
+More broadly, the paper's central methodological point, that synthetic benchmark accuracy
+and real-corpus linkage rate are different measurements that can diverge sharply, applies
 to any legal knowledge system built by combining a hand-curated resolution component with
 uncurated, real-world ingestion, independent of jurisdiction or language.
 
@@ -500,7 +492,7 @@ uncurated, real-world ingestion, independent of jurisdiction or language.
 \label{sec:future}
 
 \begin{enumerate}
-\item \textbf{Failure-mode analysis at scale}: Re-run the original's per-case classification
+\item \textbf{Failure-mode analysis at scale}: Repeat the per-case classification
    (OCR garbling vs. missing operative text vs. novel construction) across the current
    50-document amendment corpus.
 \item \textbf{Gazette-issue modelling}: Represent individual \emph{Staatsblad}/\emph{Gouvernementsblad} issues
@@ -524,8 +516,9 @@ legislation and case law, automatically consolidating amendment acts, and constr
 unified knowledge graph linking legislation, amendments, and case-law citations. Beyond the
 system itself, this paper's central contribution is methodological: we measured, rather than
 assumed, how much of our citation resolver's synthetic-benchmark accuracy (100\% precision/
-recall) survives contact with a real, uncurated corpus (17.1\% linkage), traced the gap to a
-structural mismatch between idealized and filename-derived identifiers, and report the fix.
+recall) survives contact with a real, uncurated corpus (17.1\% linkage), attributed the gap
+to a structural mismatch between idealized and filename-derived identifiers, and showed that
+reconciling the two recovers most of it.
 A parallel measurement of amendment-parsing coverage across corpus growth (82\% $\rightarrow$ 38\%) tells
 the same story from a different angle. We believe both findings generalize beyond this
 jurisdiction: legal NLP systems evaluated only against curated benchmarks can silently fail
@@ -565,7 +558,7 @@ Vitali F, Zeni F. Towards a country-independent data format: the Akoma Ntoso exp
 Proceedings of the V Legislative XML Workshop. Florence; 2007.
 
 \bibitem{koop2022}
-KOOP. Offici\"{e}le bekendmakingen --- wetten.overheid.nl. Kennis- en exploitatiecentrum voor
+KOOP. Offici\"{e}le bekendmakingen: wetten.overheid.nl. Kennis- en exploitatiecentrum voor
 offici\"{e}le overheidspublicaties; 2022.
 
 \bibitem{benchcapon2012}

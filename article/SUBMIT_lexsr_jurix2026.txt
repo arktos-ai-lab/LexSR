@@ -1,0 +1,79 @@
+==============================================================================
+TITLE
+==============================================================================
+LexSR: Consolidating Legislation and Linking Case Law to Build a Legal Knowledge Graph for Suriname, a Low-Resource Jurisdiction
+
+==============================================================================
+AUTHOR
+==============================================================================
+Ernst van Gassen, Independent researcher at Arktos AI Lab
+ORCID 0009-0000-0314-6441 | evg.gassen@gmail.com
+
+==============================================================================
+ABSTRACT  (256 words, 1841 characters)
+==============================================================================
+Access to consolidated, machine-readable legislation and linked case law is a prerequisite for effective legal information systems. No such resource previously existed for Suriname, a Dutch-speaking jurisdiction of fewer than 600,000 people with a predominantly scanned legal archive. We present LexSR, a pipeline that ingests raw government PDFs and the Hof van Justitie's case-law portal, applies OCR, classifies documents, automatically consolidates wijzigingswetten (amendment acts) into versioned legislative expressions modelled on FRBR, and links case law to the legislation it applies. The pipeline produces a corpus of 1,623 works (1,323 legislative, 300 judicial) and 45,293 fragments, from which we construct a unified knowledge graph of 2,768 edges spanning amendment, citation, and case-application relationships. We report two evaluations: a synthetic citation-resolution benchmark, where our resolver achieves 100% precision/recall against a curated 61-case gold set, and, as the paper's methodological contribution, a measurement of how much of that resolution accuracy actually survives contact with the real, messily-titled corpus it was built to run against. Only 17% of extracted citations resolve to an in-corpus work. We attribute this to a structural mismatch between the idealized canonical identifiers assumed by curated benchmarks and the filename-derived identifiers that scraped, OCR'd ingestion actually produces, and show that reconciling the two recovers most of the shortfall. We also measure amendment-parsing coverage as the corpus grew from 33 to 50 amendment documents (82% to 38%), a second instance of the same divergence between curated-subset accuracy and real-corpus performance. We discuss implications for low-resource legal NLP and make the corpus, code, and evaluation scripts publicly available.
+
+==============================================================================
+KEYWORDS  (one per line; EasyChair caps each at 100 characters)
+==============================================================================
+legal knowledge graph
+legislative consolidation
+case-law citation linking
+low-resource legal NLP
+FRBR
+Suriname
+
+==============================================================================
+TOPICS  (maximum 3; tick exactly these, in this order of relevance)
+==============================================================================
+1. Datasets and other resources that have a high potential to support significant future research in AI & Law   [PRIMARY]
+2. Semantic web, open and linked data, mark-up languages for the legal domain
+3. Network analysis applied to legal documents (statutory law, case law, jurisprudence) and legal data
+
+Why 2 outranks the NLP topics: the paper's central finding is about identifier
+resolution. Curated benchmarks assume canonical URIs; real ingestion produces
+filename-derived ones, and the two do not meet. That is a linked-data problem in
+substance, and it puts the paper in front of reviewers who already care about ELI,
+Akoma Ntoso, and URI schemes for law.
+
+Do NOT tick these, though they look tempting:
+  - Information extraction, text understanding (e.g. entailment) from legal data and texts
+      reason: the closest of the near-misses, and the one to swap in if you decide a
+      slot is better spent on method than on resource. Cut because the extraction
+      work is the means, not the claim: the resource, the identifier argument, and
+      the graph are what the paper asks to be judged on. Of the three above, 3 is the
+      one it would displace.
+  - Knowledge representation, knowledge engineering, and ontologies in the legal domain
+      reason: FRBR is applied off the shelf, not extended. Reviewers drawn by this
+      topic expect ontology engineering as a contribution and will score fit poorly.
+  - AI-enabled information systems improving access to justice and equal opportunities
+      reason: the access-to-justice motivation is real but wholly unevaluated. There
+      is no user study; Section 7.3 lists one as future work. This topic attracts
+      reviewers who will ask for impact evidence the paper does not have.
+  - e-government, e-democracy, and e-justice
+      reason: same gap as above. A public portal exists, but nothing in the paper
+      measures its use or its governance context.
+  - Deployment of Large Language Models and conversational agents
+      reason: the LLM pass is a confidence-gated fallback and is disabled entirely
+      for the reported benchmark. Ticking this promises an LLM paper and delivers a
+      regex parser with a footnote about token budgets.
+  - Natural language processing for legal text analysis (NER, SRL, Translation, etc.)
+      reason: broad enough to fit almost any paper here, which is why it buys nothing.
+      With only three slots it would crowd out a topic that actually identifies what
+      this paper is.
+  - Computational methods for compliance-checking, authorization, auditing, and regulation
+      reason: consolidation tracks what the law says, not whether anyone complies
+      with it. This topic means norm reasoning, which the paper does not do.
+
+==============================================================================
+NOTES
+==============================================================================
+Abstract is the paper's abstract verbatim, with one plain-text substitution: the
+LaTeX arrow in "(82% $\rightarrow$ 38%)" is written "(82% to 38%)" here, because
+EasyChair form fields mangle non-ASCII inconsistently. Everything else is identical
+to lexsr_jurix2026.tex. If you edit the abstract in the paper, re-cut this file.
+
+ORCID is listed above for the submission form. It is deliberately absent from the
+PDF: adding it to the corresponding-author footnote pushed the Conclusion onto page
+11 and broke the 10-page limit. See jurix2026_submission_checklist.md.
