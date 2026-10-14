@@ -1,0 +1,12 @@
+{
+  "db": "data/canonical_backup_20260913_submitted.db",
+  "seed": 20261014,
+  "tasks": {
+    "gold": 61,
+    "instructions": 147,
+    "parse_failures": 14,
+    "links": 200,
+    "gazette": 100,
+    "segmentation": 20
+  }
+}

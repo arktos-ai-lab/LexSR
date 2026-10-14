@@ -95,6 +95,12 @@ python scripts/amendment_diagnostics.py --db data/canonical.db --n 100   # amend
 python -m lexsr build-graph                                 # graph statistics
 ```
 
+## Human verification
+
+[`annotation/`](annotation/) holds a local review tool for checking the benchmark cases,
+extracted amendment instructions, citation links and case-law segmentation by hand.
+Verdicts are stored in `annotation/labels/`.
+
 ## Known limitations
 
 These are discussed in the paper:
@@ -112,6 +118,11 @@ These are discussed in the paper:
 
 The corpus database and knowledge graph will be released separately. This section will
 link to the release once it is available.
+
+Surinamese legislation and court decisions are not protected by copyright: Article 11 of
+the Auteurswet 1913 (G.B. 1913 no. 15, as amended) provides that there is no copyright in
+general regulations issued by public authority, nor in judicial decisions and
+administrative decisions.
 
 ## Repository layout
 
