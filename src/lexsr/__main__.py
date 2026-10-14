@@ -261,6 +261,13 @@ def cmd_ingest_caselaw(args: argparse.Namespace) -> int:
                 failed += 1
                 continue
 
+            # Keep the page as fetched, like the legislation scrapers keep their PDFs.
+            if doc.content:
+                raw_dir = Path(args.raw_dir) / "rechtspraak"
+                raw_dir.mkdir(parents=True, exist_ok=True)
+                slug = url.rstrip("/").rsplit("/", 1)[-1]
+                (raw_dir / f"{slug}.html").write_bytes(doc.content)
+
             result = pipeline.process_document(doc)
             if not result.success:
                 failed += 1
@@ -1118,6 +1125,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ingest-caselaw
     p = sub.add_parser("ingest-caselaw", help="Scrape rechtspraak.sr court decisions")
+    p.add_argument("--raw-dir", default=DEFAULT_RAW_DIR, metavar="DIR")
     p.add_argument("--limit", type=int, default=None, metavar="N",
                    help="Limit number of decisions to process")
     p.add_argument("--rate-limit", type=float, default=2.0, metavar="SECONDS")

@@ -146,13 +146,18 @@ class CaseLawPipeline:
     @staticmethod
     def _build_fragments(work_id: str, work_uri: str, full_text: str) -> List[Fragment]:
         fragments = []
+        seen: dict = {}
         for match in _CONSIDERATION_RE.finditer(full_text):
             number, text = match.group(1), match.group(2).strip()
             if not text:
                 continue
+            # A decision can restart its numbering (e.g. a second "2.1" under a
+            # later heading); suffix repeats so they don't overwrite each other.
+            seen[number] = seen.get(number, 0) + 1
+            key = number if seen[number] == 1 else f"{number}-{seen[number]}"
             fragments.append(Fragment(
-                id=f"{work_id}-ro{number.replace('.', '-')}",
-                uri=f"{work_uri}/consideration/{number}",
+                id=f"{work_id}-ro{key.replace('.', '-')}",
+                uri=f"{work_uri}/consideration/{key}",
                 expression_id=work_id,
                 expression_uri=work_uri,
                 work_id=work_id,

@@ -207,3 +207,13 @@ class TestCaseLawPipeline:
         stored_fragments = store.get_fragments_for_expression(result.expression.id)
         assert len(stored_fragments) == 2
         store.close()
+
+
+class TestRepeatedConsiderationNumbers:
+    def test_repeated_numbers_get_distinct_ids(self):
+        text = "1.1 Eerste procedure.\n2.1 Eerste beoordeling.\n2.1 Tweede reeks, zelfde nummer."
+        frs = CaseLawPipeline._build_fragments("caselaw-x", "/id/caselaw/x", text)
+        assert [f.number for f in frs] == ["1.1", "2.1", "2.1"]
+        assert len({f.id for f in frs}) == 3
+        assert frs[2].uri.endswith("/consideration/2.1-2")
+        assert "Tweede reeks" in frs[2].text and "Eerste beoordeling" in frs[1].text

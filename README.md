@@ -87,6 +87,28 @@ python -m lexsr search "arbeidswet"    # search the corpus
 python -m lexsr generate               # build the static website
 ```
 
+## Collecting the data yourself
+
+The corpus can be rebuilt from the public sources with one command, which runs the
+scrapers, OCR, case-law ingestion, consolidation, citation linking and graph build in the
+order used for the paper:
+
+```bash
+python scripts/rebuild_corpus.py                 # resumable: ingestion skips stored documents
+python scripts/rebuild_corpus.py --from consolidate   # resume from a later step
+```
+
+Downloaded files land in `data/raw/<source>/`; the canonical store is `data/canonical.db`.
+Government websites change, so a rebuild will not return exactly the paper's documents.
+[`manifest/raw_sources.csv`](manifest/raw_sources.csv) lists every source file behind the
+paper's corpus with its SHA-256 (and URL for case law); the 300 case-law pages were fetched
+again on 2026-10-14 and segment to exactly the considerations stored in the paper's
+corpus. Check your download against the manifest with:
+
+```bash
+python scripts/build_source_manifest.py --check
+```
+
 ## Reproducing the paper's evaluations
 
 ```bash
@@ -110,6 +132,9 @@ These are discussed in the paper:
 - 36 of 50 amendment documents yield at least one classified instruction. All failures
   trace to operative text missing from the ingested source, not to the parser rules.
 - Six of sixteen candidate government sources were excluded because their sites changed.
+- In the paper's corpus, 12 considerations in 7 decisions are missing because those
+  decisions reuse a consideration number and the later one overwrote the earlier. This is
+  fixed in the code; a fresh build stores all 1,152.
 - OCR quality and document classification are not evaluated separately.
 - The 61-case citation benchmark was produced together with the resolver patterns and
   measures pattern coverage, not generalisation.
